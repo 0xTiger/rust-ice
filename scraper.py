@@ -12,6 +12,20 @@ from selenium.webdriver.common.by import By
 
 from db import db_ctx, Product
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    GREEN = '\033[32m'
+    RED = '\033[31m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
 def update_last_scraped_val(url: str):
     with db_ctx() as db:
         (
@@ -33,7 +47,7 @@ def scrape_asda_product(url: str):
         WebDriverWait(browser, 30).until(condition)
     except TimeoutException:
         update_last_scraped_val(url)
-        return
+        return 'FAILURE_TIMEOUT'
     soup = BeautifulSoup(browser.page_source, features="html.parser")
     browser.quit()
 
@@ -45,18 +59,10 @@ def scrape_asda_product(url: str):
     # net_content = soup.find('div', class_='pdp-description-reviews__product-details-title', string='Net Content').parent.find('div', class_='pdp-description-reviews__product-details-content').text
 
     json_ld = json.loads(soup.find_all('script', type="application/ld+json")[-1].text)
-    # found_urls = {'https://groceries.asda.com/product/' + x.group(1) 
-    #     for x in re.finditer(r'/product/([\-/a-zA-Z0-9]+)', str(soup))
-    # } - {url}
-    # if len(found_urls) > 0:
-    #     print('Found urls:')
-    #     for url in found_urls:
-    #         print(f'-   {url}')
 
     if 'name' not in json_ld:
         update_last_scraped_val(url)
-        return
-    print(f'Scraped {json_ld["name"]}')
+        return 'FAILURE_MISSING_NAME'
 
     with db_ctx() as db:
         update_params = dict(
@@ -80,10 +86,14 @@ def scrape_asda_product(url: str):
             .update(update_params)
         )
         db.commit()
+    
+    return 'SUCCESS'
 
 with db_ctx() as db:
     urls_to_scrape = db.execute(text('SELECT url FROM product WHERE last_scraped IS NULL')).scalars().all()
 
 for url in urls_to_scrape:
-    print(url)
-    scrape_asda_product(url)
+    print(url, end='', flush=True)
+    status = scrape_asda_product(url)
+    
+    print(f' - {bcolors.GREEN if status == "SUCCESS" else bcolors.RED}{status}{bcolors.ENDC}')
