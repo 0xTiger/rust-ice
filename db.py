@@ -1,7 +1,7 @@
 import os
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Integer, Column, String, JSON, BigInteger, Float
+from sqlalchemy import create_engine, Integer, Column, String, JSON, BigInteger, Float, DateTime
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -52,6 +52,7 @@ class Product(Base):
     price = Column(Float)
     url = Column(String, unique=True)
     availability = Column(String)
+    last_scraped = Column(DateTime)
 
 
 

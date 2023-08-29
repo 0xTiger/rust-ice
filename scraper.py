@@ -1,7 +1,7 @@
 import json
+from datetime import datetime
 
 from sqlalchemy import text
-
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver import Chrome
@@ -11,6 +11,15 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.by import By
 
 from db import db_ctx, Product
+
+def update_last_scraped_val(url: str):
+    with db_ctx() as db:
+        (
+            db.query(Product)
+            .filter(Product.url == url)
+            .update(dict(last_scraped = datetime.now()))
+        )
+        db.commit()
 
 
 def scrape_asda_product(url: str):
@@ -23,6 +32,7 @@ def scrape_asda_product(url: str):
     try:
         WebDriverWait(browser, 30).until(condition)
     except TimeoutException:
+        update_last_scraped_val(url)
         return
     soup = BeautifulSoup(browser.page_source, features="html.parser")
     browser.quit()
@@ -43,7 +53,9 @@ def scrape_asda_product(url: str):
     #     for url in found_urls:
     #         print(f'-   {url}')
 
-    if 'name' not in json_ld: return
+    if 'name' not in json_ld:
+        update_last_scraped_val(url)
+        return
     print(f'Scraped {json_ld["name"]}')
 
     with db_ctx() as db:
@@ -60,6 +72,7 @@ def scrape_asda_product(url: str):
             price = json_ld['offers']['price'],
             url = json_ld['offers']['url'],
             availability = json_ld['offers']['availability'],
+            last_scraped = datetime.now()
         )
         (
             db.query(Product)
@@ -69,7 +82,7 @@ def scrape_asda_product(url: str):
         db.commit()
 
 with db_ctx() as db:
-    urls_to_scrape = db.execute(text('SELECT url FROM product WHERE gtin IS NULL')).scalars().all()
+    urls_to_scrape = db.execute(text('SELECT url FROM product WHERE last_scraped IS NULL')).scalars().all()
 
 for url in urls_to_scrape:
     print(url)
