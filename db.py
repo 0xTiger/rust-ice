@@ -39,7 +39,8 @@ def db_ctx():
 class Product(Base):
     __tablename__ = 'product'
 
-    gtin = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    gtin = Column(Integer, unique=True)
     json_ld = Column(JSON)
     name = Column(String)
     sku = Column(BigInteger)
@@ -49,7 +50,7 @@ class Product(Base):
     review_count = Column(Integer)
     brand = Column(String)
     price = Column(Float)
-    url = Column(String)
+    url = Column(String, unique=True)
     availability = Column(String)
 
 
