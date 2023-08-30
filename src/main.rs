@@ -1,3 +1,5 @@
+use std::env;
+use dotenv::dotenv;
 use axum::{
     http::StatusCode,
     response::IntoResponse,
@@ -10,6 +12,7 @@ use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
     let app = Router::new()
@@ -38,9 +41,13 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 
 async fn product() -> (StatusCode, Json<Product>) {
     
+    let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
+    let pg_user: String = env::var("POSTGRES_USER").expect("$POSTGRES_PASSWORD is not set");
+
     let pool = PgPoolOptions::new()
     .max_connections(5)
-    .connect("postgres://postgres:***@localhost:5444/supermarket").await.unwrap();
+    .connect(format!("postgres://{pg_user}:{pg_password}@localhost:5444/supermarket").as_str())
+    .await.unwrap();
 
     let row: (i32, String) = sqlx::query_as("SELECT gtin, name FROM product WHERE gtin = $1")
     .bind(7277397) 
