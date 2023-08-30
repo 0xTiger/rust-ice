@@ -52,7 +52,11 @@ async fn product(Path(product_id): Path<i32>) -> impl IntoResponse {
     .await.unwrap();
 
     // let row: (i32, String) 
-    let result: Result<(i32, String), sqlx::Error>= sqlx::query_as("SELECT gtin, name FROM product WHERE gtin = $1")
+    let result: Result<(i32, String, i64, String, String, f64, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
+        "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+        FROM product
+        WHERE gtin = $1"
+    )
     .bind(product_id) 
     .fetch_one(&pool).await;
 
@@ -61,10 +65,12 @@ async fn product(Path(product_id): Path<i32>) -> impl IntoResponse {
     // }
     match result {
         Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
-        Err(_) => {panic!()}
+        Err(value) => {panic!("{}", value)}
         Ok(row) => {
-            let (gtin, name) = row;
-            let prod = Product { id: gtin, name: name };
+            let (gtin, name, sku, image, description, rating, review_count, brand, price, url, availability) = row;
+            let prod = Product { gtin: gtin, name: name, sku: sku, image: image, description: description,
+                rating: rating, review_count: review_count, brand: brand,
+                price: price, url: url, availability: availability};
             Json(prod).into_response()
         }
     }
@@ -81,6 +87,15 @@ struct JStatus {
 
 #[derive(Serialize)]
 struct Product {
-    id: i32,
+    gtin: i32,
     name: String,
+    sku: i64,
+    image: String,
+    description: String,
+    rating: f64,
+    review_count: i32,
+    brand: String,
+    price: f64,
+    url: String,
+    availability: String
 }
