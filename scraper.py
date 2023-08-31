@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver import Chrome
@@ -80,20 +81,24 @@ def scrape_asda_product(url: str):
             availability = json_ld['offers']['availability'],
             last_scraped = datetime.now()
         )
-        (
-            db.query(Product)
-            .filter(Product.url == url)
-            .update(update_params)
-        )
-        db.commit()
+        try:
+            (
+                db.query(Product)
+                .filter(Product.url == url)
+                .update(update_params)
+            )
+            db.commit()
+        except IntegrityError:
+            return 'FAILURE_DUPLICATED_URL'
     
     return 'SUCCESS'
 
-with db_ctx() as db:
-    urls_to_scrape = db.execute(text('SELECT url FROM product WHERE last_scraped IS NULL')).scalars().all()
+if __name__ == '__main__':
+    with db_ctx() as db:
+        urls_to_scrape = db.execute(text('SELECT url FROM product WHERE last_scraped IS NULL')).scalars().all()
 
-for url in urls_to_scrape:
-    print(url, end='', flush=True)
-    status = scrape_asda_product(url)
-    
-    print(f' - {bcolors.GREEN if status == "SUCCESS" else bcolors.RED}{status}{bcolors.ENDC}')
+    for url in urls_to_scrape:
+        print(url, end='', flush=True)
+        status = scrape_asda_product(url)
+        
+        print(f' - {bcolors.GREEN if status == "SUCCESS" else bcolors.RED}{status}{bcolors.ENDC}')
