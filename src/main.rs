@@ -5,22 +5,34 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
+    Json,
+    Router,
+    Extension,
 };
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Error;
+use sqlx::PgPool;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+    let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
+    let pg_user: String = env::var("POSTGRES_USER").expect("$POSTGRES_PASSWORD is not set");
+
+    let pool = PgPoolOptions::new()
+    .max_connections(5)
+    .connect(format!("postgres://{pg_user}:{pg_password}@localhost:5444/supermarket").as_str())
+    .await.unwrap();
+
     tracing_subscriber::fmt::init();
 
     let app = Router::new()
         .route("/", get(root))
         .route("/ping", get(ping))
-        .route("/product/:product_id", get(product));
+        .route("/product/:product_id", get(product))
+        .layer(Extension(pool));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -41,15 +53,8 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
     (StatusCode::OK, Json(JStatus { detail: true }))
 }
 
-async fn product(Path(product_id): Path<i32>) -> impl IntoResponse {
-    
-    let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
-    let pg_user: String = env::var("POSTGRES_USER").expect("$POSTGRES_PASSWORD is not set");
+async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
-    let pool = PgPoolOptions::new()
-    .max_connections(5)
-    .connect(format!("postgres://{pg_user}:{pg_password}@localhost:5444/supermarket").as_str())
-    .await.unwrap();
 
     // let row: (i32, String) 
     let result: Result<(i32, String, i64, String, String, f64, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
