@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::env;
+use std::collections::HashMap;
 use dotenv::dotenv;
 use axum::{
     extract::Path,
+    extract::Query,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -34,6 +36,7 @@ async fn main() {
         .route("/", get(root))
         .route("/ping", get(ping))
         .route("/product/:product_id", get(product))
+        .route("/product/search", get(search))
         .layer(Extension(pool));
 
     // run our app with hyper
@@ -75,9 +78,40 @@ async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>
             Json(prod).into_response()
         }
     }
+}
 
-    
+async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
+    let query = format!("%{}%", params.get("query").unwrap());
+    let default_sort = &"name".to_string();
+    let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
+    let result: Result<Vec<(i32, String, i64, String, String, f64, i32, String, f64, String, String)>, sqlx::Error> = sqlx::query_as(
+        format!(
+            "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+            FROM product
+            WHERE name ILIKE $1
+            ORDER BY {sort} DESC
+            LIMIT 10"
+        ).as_str()
+    )
+    .bind(query).bind(sort) 
+    .fetch_all(&pool).await;
+
+    match result {
+        Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
+        Err(value) => {panic!("{}", value)}
+        Ok(rows) => {
+
+            let mut prods = Vec::new();
+            for (gtin, name, sku, image, description, rating, review_count, brand, price, url, availability) in rows {
+                let prod = Product { gtin: gtin, name: name, sku: sku, image: image, description: description,
+                    rating: rating, review_count: review_count, brand: brand,
+                    price: price, url: url, availability: availability};
+                prods.push(prod);
+            }
+            Json(prods).into_response()
+        }
+    }
 }
 
 #[derive(Serialize)]
