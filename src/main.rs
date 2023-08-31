@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::env;
 use dotenv::dotenv;
 use axum::{
@@ -9,11 +11,11 @@ use axum::{
     Router,
     Extension,
 };
-use sqlx::postgres::PgPoolOptions;
-use sqlx::Error;
-use sqlx::PgPool;
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use sqlx::{
+    postgres::PgPoolOptions,
+    Error,
+    PgPool,
+};
 
 #[tokio::main]
 async fn main() {
@@ -44,7 +46,6 @@ async fn main() {
         .unwrap();
 }
 
-// basic handler that responds with a static string
 async fn root() -> &'static str {
     "Hello, World!"
 }
@@ -55,8 +56,6 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 
 async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
-
-    // let row: (i32, String) 
     let result: Result<(i32, String, i64, String, String, f64, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
         "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
         FROM product
@@ -65,9 +64,6 @@ async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>
     .bind(product_id) 
     .fetch_one(&pool).await;
 
-    // if result.is_err_and(|x| x == Error::RowNotFound) {
-    //     (StatusCode::NOT_FOUND, Json(prod))
-    // }
     match result {
         Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
         Err(value) => {panic!("{}", value)}
