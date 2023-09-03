@@ -40,7 +40,7 @@ class Product(Base):
     __tablename__ = 'product'
 
     id = Column(Integer, primary_key=True)
-    gtin = Column(Integer, unique=True)
+    gtin = Column(Integer, index=True)
     json_ld = Column(JSON)
     name = Column(String)
     sku = Column(BigInteger)
@@ -50,9 +50,6 @@ class Product(Base):
     review_count = Column(Integer)
     brand = Column(String)
     price = Column(Float)
-    url = Column(String, unique=True)
+    url = Column(String)
     availability = Column(String)
     last_scraped = Column(DateTime)
-
-
-

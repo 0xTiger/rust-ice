@@ -66,7 +66,7 @@ def scrape_asda_product(url: str):
         return 'FAILURE_MISSING_NAME'
 
     with db_ctx() as db:
-        update_params = dict(
+        product = Product(
             gtin = json_ld['gtin'],
             json_ld = json_ld,
             name = json_ld['name'],
@@ -82,11 +82,7 @@ def scrape_asda_product(url: str):
             last_scraped = datetime.now()
         )
         try:
-            (
-                db.query(Product)
-                .filter(Product.url == url)
-                .update(update_params)
-            )
+            db.add(product)
             db.commit()
         except IntegrityError:
             return 'FAILURE_DUPLICATED_URL'
@@ -95,7 +91,7 @@ def scrape_asda_product(url: str):
 
 if __name__ == '__main__':
     with db_ctx() as db:
-        urls_to_scrape = db.execute(text('SELECT url FROM product WHERE last_scraped IS NULL')).scalars().all()
+        urls_to_scrape = db.execute(text("SELECT url FROM product WHERE last_scraped < NOW() - interval '2 day';")).scalars().all()
 
     for url in urls_to_scrape:
         print(url, end='', flush=True)
