@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.by import By
 
-from db import db_ctx, Product
+from db import db_ctx, Product, ProductScrapeStatus
 
 class bcolors:
     HEADER = '\033[95m'
@@ -27,16 +27,6 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-def update_last_scraped_val(url: str):
-    with db_ctx() as db:
-        (
-            db.query(Product)
-            .filter(Product.url == url)
-            .update(dict(last_scraped = datetime.now()))
-        )
-        db.commit()
-
-
 def scrape_asda_product(url: str):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -47,7 +37,6 @@ def scrape_asda_product(url: str):
     try:
         WebDriverWait(browser, 30).until(condition)
     except TimeoutException:
-        update_last_scraped_val(url)
         return 'FAILURE_TIMEOUT'
     soup = BeautifulSoup(browser.page_source, features="html.parser")
     browser.quit()
@@ -62,7 +51,6 @@ def scrape_asda_product(url: str):
     json_ld = json.loads(soup.find_all('script', type="application/ld+json")[-1].text)
 
     if 'name' not in json_ld:
-        update_last_scraped_val(url)
         return 'FAILURE_MISSING_NAME'
 
     with db_ctx() as db:
@@ -79,7 +67,7 @@ def scrape_asda_product(url: str):
             price = json_ld['offers']['price'],
             url = json_ld['offers']['url'],
             availability = json_ld['offers']['availability'],
-            last_scraped = datetime.now()
+            scraped = datetime.now()
         )
         try:
             db.add(product)
@@ -91,10 +79,30 @@ def scrape_asda_product(url: str):
 
 if __name__ == '__main__':
     with db_ctx() as db:
-        urls_to_scrape = db.execute(text("SELECT url FROM product WHERE last_scraped < NOW() - interval '2 day';")).scalars().all()
+        query = """
+        SELECT url FROM productscrapestatus
+        WHERE
+            last_scraped < NOW() - interval '2 day'
+            OR last_scraped IS NULL
+        ORDER BY last_scraped NULLS FIRST
+        """
+        urls_to_scrape = db.execute(text(query)).scalars().all()
 
     for url in urls_to_scrape:
         print(url, end='', flush=True)
         status = scrape_asda_product(url)
+
+        with db_ctx() as db:
+            (
+                db.query(ProductScrapeStatus)
+                .filter(ProductScrapeStatus.url == url)
+                .update(dict(
+                    last_scraped = datetime.now(),
+                    scrape_success = status == 'SUCCESS',
+                    fail_reason = None if status == 'SUCCESS' else status
+                ))
+            )
+            db.commit()
+
         
         print(f' - {bcolors.GREEN if status == "SUCCESS" else bcolors.RED}{status}{bcolors.ENDC}')

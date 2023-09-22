@@ -1,7 +1,7 @@
 import os
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Integer, Column, String, JSON, BigInteger, Float, DateTime
+from sqlalchemy import create_engine, Integer, Column, String, JSON, BigInteger, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -52,4 +52,14 @@ class Product(Base):
     price = Column(Float)
     url = Column(String)
     availability = Column(String)
+    scraped = Column(DateTime)
+
+
+class ProductScrapeStatus(Base):
+    __tablename__ = 'productscrapestatus'
+
+    id = Column(Integer, primary_key=True)
+    url = Column(String, unique=True)
+    scrape_success = Column(Boolean)
+    fail_reason = Column(String)
     last_scraped = Column(DateTime)

@@ -39,7 +39,7 @@ browser.quit()
 with db_ctx() as db:
     for url in found_products:
         db.execute(
-            text('INSERT INTO product (url) VALUES (:url) ON CONFLICT DO NOTHING'),
+            text('INSERT INTO productscrapestatus (url) VALUES (:url) ON CONFLICT DO NOTHING'),
             dict(url=url)
         )
     db.commit()
