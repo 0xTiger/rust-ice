@@ -7,7 +7,11 @@ from sqlalchemy import text
 from bs4 import BeautifulSoup
 from selenium.webdriver import Chrome, ActionChains
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchWindowException, MoveTargetOutOfBoundsException
+from selenium.common.exceptions import (
+    NoSuchWindowException,
+    MoveTargetOutOfBoundsException,
+    StaleElementReferenceException
+)
 
 from db import db_ctx
 from scraper import bcolors
@@ -132,7 +136,7 @@ for i in count():
                 if status == 'MENU_EXHAUSTED':
                     time.sleep(0.5)
                     back_to_groceries()
-            except MoveTargetOutOfBoundsException:
+            except (MoveTargetOutOfBoundsException, StaleElementReferenceException):
                 time.sleep(0.5)
         
         if i % 20 == 0:
