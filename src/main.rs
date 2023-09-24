@@ -62,7 +62,8 @@ async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>
     let result: Result<(i32, String, i64, String, String, f64, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
         "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
         FROM product
-        WHERE gtin = $1"
+        WHERE gtin = $1
+        ORDER BY scraped DESC"
     )
     .bind(product_id) 
     .fetch_one(&pool).await;
@@ -87,10 +88,13 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
     let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
     let result: Result<Vec<(i32, String, i64, String, String, f64, i32, String, f64, String, String)>, sqlx::Error> = sqlx::query_as(
         format!(
-            "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
-            FROM product
-            WHERE name ILIKE $1
-            ORDER BY {sort} DESC
+            "SELECT * FROM (
+                SELECT DISTINCT ON (gtin) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+                FROM product
+                WHERE name ILIKE $1
+                ORDER BY gtin, scraped DESC
+            ) t1
+            ORDER BY {sort} ASC
             LIMIT 10"
         ).as_str()
     )
