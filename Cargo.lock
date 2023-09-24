@@ -1083,20 +1083,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-api"
-version = "0.1.0"
-dependencies = [
- "axum",
- "dotenv",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1517,6 +1503,20 @@ name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+
+[[package]]
+name = "supermarket-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "dotenv",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "syn"
