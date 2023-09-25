@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use chrono::{NaiveDateTime, NaiveDate};
 use std::net::SocketAddr;
 use std::env;
 use std::collections::HashMap;
@@ -7,7 +8,7 @@ use axum::{
     extract::Path,
     extract::Query,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Html},
     routing::{get, post},
     Json,
     Router,
@@ -35,6 +36,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(root))
         .route("/ping", get(ping))
+        .route("/inflation", get(inflation))
         .route("/product/:product_id", get(product))
         .route("/product/search", get(search))
         .layer(Extension(pool));
@@ -53,9 +55,49 @@ async fn root() -> &'static str {
     "Hello, World!"
 }
 
+
 async fn ping() -> (StatusCode, Json<JStatus>) {
     (StatusCode::OK, Json(JStatus { detail: true }))
 }
+
+
+async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
+    let query = "
+    SELECT gtin, ARRAY_AGG(price ORDER BY scraped), ARRAY_AGG(scraped ORDER BY scraped)
+    FROM product
+    GROUP BY gtin
+    HAVING COUNT(*) >= 2";
+    let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
+    let result = result.unwrap();
+    let dts_to_check  = vec![
+        NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        NaiveDate::from_ymd_opt(2023, 9, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        NaiveDate::from_ymd_opt(2023, 9, 10).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        NaiveDate::from_ymd_opt(2023, 9, 20).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        NaiveDate::from_ymd_opt(2023, 9, 30).unwrap().and_hms_opt(0, 0, 0).unwrap()
+    ];
+    let mut final_table = Vec::new();
+    for dt in dts_to_check {
+        let mut relevant_prices = Vec::new();
+        for (gtin, prices, scraped) in &result {
+            let idx = match scraped.binary_search(&dt) {
+                Ok(x) => x,
+                Err(x) => x.saturating_sub(1)
+            };
+            if prices[0] == 0.0 {
+                continue
+            }
+            relevant_prices.push(prices[idx] / prices[0]);
+            // println!("{gtin}{prices:?}{scraped:?}");
+        }
+        // println!("{:?}{}", relevant_prices.iter().sum::<f64>(), relevant_prices.len());
+        final_table.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
+    }
+    let final_table: Vec<String> = final_table.iter().map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val}</td></tr>")).collect();
+    let output_html = final_table.join("");
+    Html(format!("<table>{output_html}</table>"))
+}
+
 
 async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
