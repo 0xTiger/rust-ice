@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use chrono::{NaiveDateTime, NaiveDate};
+use chrono::{NaiveDateTime, NaiveDate, Days};
 use std::net::SocketAddr;
 use std::env;
 use std::collections::HashMap;
@@ -69,17 +69,13 @@ async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
     HAVING COUNT(*) >= 2";
     let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
     let result = result.unwrap();
-    let dts_to_check  = vec![
-        NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
-        NaiveDate::from_ymd_opt(2023, 9, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
-        NaiveDate::from_ymd_opt(2023, 9, 10).unwrap().and_hms_opt(0, 0, 0).unwrap(),
-        NaiveDate::from_ymd_opt(2023, 9, 20).unwrap().and_hms_opt(0, 0, 0).unwrap(),
-        NaiveDate::from_ymd_opt(2023, 9, 30).unwrap().and_hms_opt(0, 0, 0).unwrap()
-    ];
+    let dts_to_check: Vec<NaiveDateTime> = (0..50)
+        .into_iter()
+        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*3)).collect();
     let mut final_table = Vec::new();
     for dt in dts_to_check {
         let mut relevant_prices = Vec::new();
-        for (gtin, prices, scraped) in &result {
+        for (_gtin, prices, scraped) in &result {
             let idx = match scraped.binary_search(&dt) {
                 Ok(x) => x,
                 Err(x) => x.saturating_sub(1)
@@ -93,7 +89,7 @@ async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
         // println!("{:?}{}", relevant_prices.iter().sum::<f64>(), relevant_prices.len());
         final_table.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
     }
-    let final_table: Vec<String> = final_table.iter().map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val}</td></tr>")).collect();
+    let final_table: Vec<String> = final_table.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
     let output_html = final_table.join("");
     Html(format!("<table>{output_html}</table>"))
 }
