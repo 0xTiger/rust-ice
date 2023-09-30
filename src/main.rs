@@ -101,8 +101,8 @@ async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool
     let final_table: Vec<String> = final_table.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
     let output_html = final_table.join("");
     let header = r#"
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
         <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css\" rel=\"stylesheet\" integrity=\"sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     "#;
     let dropdown = r##"
     <select name="timeframe" hx-get="/inflation" hx-target="#inflation-table" hx-indicator=".htmx-indicator">
