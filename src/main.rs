@@ -61,7 +61,7 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 }
 
 
-async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
+async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> Html<String> {
     let query = "
     SELECT gtin, ARRAY_AGG(price ORDER BY scraped), ARRAY_AGG(scraped ORDER BY scraped)
     FROM product
@@ -69,9 +69,18 @@ async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
     HAVING COUNT(*) >= 2";
     let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
     let result = result.unwrap();
+    let timeframe_default = &"day".to_owned();
+    let timeframe = params.get("timeframe").unwrap_or(timeframe_default).as_str();
+
+    let timeframe = match timeframe {
+        "day" => 1,
+        "week" => 7,
+        "month" => 30,
+        _ => 1
+    };
     let dts_to_check: Vec<NaiveDateTime> = (0..50)
         .into_iter()
-        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*3)).collect();
+        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*timeframe)).collect();
     let mut final_table = Vec::new();
     for dt in dts_to_check {
         let mut relevant_prices = Vec::new();
@@ -91,7 +100,22 @@ async fn inflation(Extension(pool): Extension<PgPool>) -> Html<String> {
     }
     let final_table: Vec<String> = final_table.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
     let output_html = final_table.join("");
-    Html(format!("<table>{output_html}</table>"))
+    let header = r#"
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css\" rel=\"stylesheet\" integrity=\"sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    "#;
+    let dropdown = r##"
+    <select name="timeframe" hx-get="/inflation" hx-target="#inflation-table" hx-indicator=".htmx-indicator">
+        <option value="day">Day</option>
+        <option value="week">Week</option>
+        <option value="month">Month</option>
+    </select>
+    "##;
+    if params.get("timeframe").is_none() {
+        Html(format!("{header}{dropdown}<table class=\"table table-sm\" id=\"inflation-table\">{output_html}</table>"))
+    } else {
+        Html(format!("<table class=\"table table-sm\" id=\"inflation-table\">{output_html}</table>"))
+    }
 }
 
 
