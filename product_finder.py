@@ -35,34 +35,23 @@ def scroll_to_element(driver, element_locator):
 def accept_cookies():
     print('accept_cookies')
     clickable = browser.find_element(By.ID, "onetrust-accept-btn-handler")
-    ActionChains(browser)\
-        .click(clickable)\
-        .perform()
+    ActionChains(browser).click(clickable).perform()
 
 
 def open_menu():
     print('open_menu')
     clickable = browser.find_element(By.CLASS_NAME, "menu-button")
-    ActionChains(browser)\
-        .click(clickable)\
-        .perform()
+    ActionChains(browser).click(clickable).perform()
 
 
 def goto_groceries():
     print('goto_groceries')
     clickable = browser.find_element(By.XPATH, "//button[text()='Groceries']")
-    ActionChains(browser)\
-        .click(clickable)\
-        .perform()
+    ActionChains(browser).click(clickable).perform()
+
 
 def back_to_groceries():
     print('back_to_groceries')
-    # clickable = browser.find_element(By.XPATH, "//button[text()='Shop Groceries']")
-    # scroll_to_element(browser, clickable)
-    # # print(clickable.text)
-    # ActionChains(browser)\
-    #     .click(clickable)\
-    #     .perform()
     clickable = [x for x in browser.find_elements(By.CLASS_NAME, "asda-slide-nav__item-container") if x.text == 'Shop Groceries'][0]
     ActionChains(browser).click(clickable).perform()
     
@@ -70,7 +59,7 @@ def back_to_groceries():
 def nav_to_random_menu_item():
     print('nav_to_random_menu_item', flush=True, end='')
     menu_items = browser.find_elements(By.CLASS_NAME, "slide-navigation-menu__item")
-    print([m.text for m in menu_items])
+    # print([m.text for m in menu_items])
     if not menu_items:
         print(' - None found')
         return 'MENU_NOT_FOUND'
@@ -82,9 +71,7 @@ def nav_to_random_menu_item():
     clickable_text = clickable.text
     print(f' - {clickable_text}')
     scroll_to_element(browser, clickable)
-    ActionChains(browser)\
-        .click(clickable)\
-        .perform()
+    ActionChains(browser).click(clickable).perform()
     visited_cats.add(clickable_text)
     return 'SUCCESS'
 
