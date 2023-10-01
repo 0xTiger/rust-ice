@@ -69,19 +69,21 @@ async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool
     HAVING COUNT(*) >= 2";
     let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
     let result = result.unwrap();
-    let timeframe_default = &"day".to_owned();
+    let timeframe_default = &"day-chart".to_owned();
     let timeframe = params.get("timeframe").unwrap_or(timeframe_default).as_str();
-
-    let timeframe = match timeframe {
+    let timeframe_parts = timeframe.split("-").collect::<Vec<&str>>();
+    let timeframe = match timeframe_parts[0] {
         "day" => 1,
         "week" => 7,
         "month" => 30,
         _ => 1
     };
-    let dts_to_check: Vec<NaiveDateTime> = (0..50)
+    let is_chart = timeframe_parts[1] == "chart";
+
+    let dts_to_check: Vec<NaiveDateTime> = (0..30)
         .into_iter()
         .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*timeframe)).collect();
-    let mut final_table = Vec::new();
+    let mut inflation_data = Vec::new();
     for dt in dts_to_check {
         let mut relevant_prices = Vec::new();
         for (_gtin, prices, scraped) in &result {
@@ -96,25 +98,84 @@ async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool
             // println!("{gtin}{prices:?}{scraped:?}");
         }
         // println!("{:?}{}", relevant_prices.iter().sum::<f64>(), relevant_prices.len());
-        final_table.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
+        inflation_data.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
     }
-    let final_table: Vec<String> = final_table.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
+    let final_table: Vec<String> = inflation_data.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
     let output_html = final_table.join("");
     let header = r#"
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <!DOCTYPE html>
+        <head>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+            <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        </head>
     "#;
     let dropdown = r##"
-    <select name="timeframe" hx-get="/inflation" hx-target="#inflation-table" hx-indicator=".htmx-indicator">
-        <option value="day">Day</option>
-        <option value="week">Week</option>
-        <option value="month">Month</option>
+    <select name="timeframe" hx-get="/inflation" hx-target="#inflation-viz" hx-swap="outerHTML">
+        <option value="day-chart">Day Chart</option>
+        <option value="week-chart">Week Chart</option>
+        <option value="month-chart">Month Chart</option>
+        <option value="day-table">Day Table</option>
+        <option value="week-table">Week Table</option>
+        <option value="month-table">Month Table</option>
     </select>
     "##;
+    let (x, y): (Vec<NaiveDateTime>, Vec<f64>) = inflation_data.into_iter().unzip();
+    let x: Vec<String> = x.into_iter().map(|d| format!("{d:?}")).collect();
+    let chart_html = format!(r#"
+    <div class="chart-container" style="position: relative; height: 70vh; width: 100vw;">
+        <canvas id="inflation-chart"></canvas>
+    </div>
+
+    <script>
+    var datasets = [{{
+        label: "myfirstdataset",
+        data: {y:?},
+        pointHitRadius: 10,
+        pointRadius: 0,
+
+    }}];
+    var labels = {x:?};
+    var chart_type = "line";
+    var data = {{
+        labels: labels,
+        datasets: datasets,    
+    }};
+
+    var config = {{
+        type: chart_type,
+        data: data,
+        options: {{
+            scales: {{
+                y: {{
+                    grace: "20%",
+                    stacked: true
+                }},
+            }},
+            animation: {{
+                duration: 0,
+            }},
+            maintainAspectRatio: false
+        }}
+    }};
+    var InflationChart = new Chart(
+        document.getElementById('inflation-chart'),
+        config,
+    );
+    </script>
+    "#);
     if params.get("timeframe").is_none() {
-        Html(format!("{header}{dropdown}<table class=\"table table-sm\" id=\"inflation-table\">{output_html}</table>"))
+        if is_chart {
+            Html(format!("{header}{dropdown}<div id=\"inflation-viz\">{chart_html}</div>"))
+        } else {
+            Html(format!("{header}{dropdown}<table id=\"inflation-viz\" class=\"table table-sm\">{output_html}</table>"))
+        }
     } else {
-        Html(format!("<table class=\"table table-sm\" id=\"inflation-table\">{output_html}</table>"))
+        if is_chart {
+            Html(format!("<div id=\"inflation-viz\">{chart_html}</div>"))
+        } else {
+            Html(format!("<table id=\"inflation-viz\" class=\"table table-sm\">{output_html}</table>"))
+        }
     }
 }
 
