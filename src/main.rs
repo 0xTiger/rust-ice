@@ -37,6 +37,7 @@ async fn main() {
         .route("/", get(root))
         .route("/ping", get(ping))
         .route("/inflation", get(inflation))
+        .route("/inflation-viz", get(inflation_viz))
         .route("/product/:product_id", get(product))
         .route("/product/search", get(search))
         .layer(Extension(pool));
@@ -61,7 +62,28 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 }
 
 
-async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> Html<String> {
+async fn inflation() -> Html<String> {
+    let header = r#"
+    <!DOCTYPE html>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    "#;
+    let dropdown = r##"
+    <select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
+        <option value="day-chart">Day Chart</option>
+        <option value="week-chart">Week Chart</option>
+        <option value="month-chart">Month Chart</option>
+        <option value="day-table">Day Table</option>
+        <option value="week-table">Week Table</option>
+        <option value="month-table">Month Table</option>
+    </select>
+    "##;
+    Html(format!(r#"{header}{dropdown}<div id="inflation-viz" hx-get="/inflation-viz?timeframe=day-chart" hx-trigger="load"></div>"#))
+}
+
+
+async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> Html<String> {
     let query = "
     SELECT gtin, ARRAY_AGG(price ORDER BY scraped), ARRAY_AGG(scraped ORDER BY scraped)
     FROM product
@@ -95,31 +117,12 @@ async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool
                 continue
             }
             relevant_prices.push(prices[idx] / prices[0]);
-            // println!("{gtin}{prices:?}{scraped:?}");
         }
-        // println!("{:?}{}", relevant_prices.iter().sum::<f64>(), relevant_prices.len());
         inflation_data.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
     }
     let final_table: Vec<String> = inflation_data.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
-    let output_html = final_table.join("");
-    let header = r#"
-        <!DOCTYPE html>
-        <head>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-            <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        </head>
-    "#;
-    let dropdown = r##"
-    <select name="timeframe" hx-get="/inflation" hx-target="#inflation-viz" hx-swap="outerHTML">
-        <option value="day-chart">Day Chart</option>
-        <option value="week-chart">Week Chart</option>
-        <option value="month-chart">Month Chart</option>
-        <option value="day-table">Day Table</option>
-        <option value="week-table">Week Table</option>
-        <option value="month-table">Month Table</option>
-    </select>
-    "##;
+    let table_html = format!(r#"<table class="table table-sm">{}</table>"#, final_table.join(""));
+
     let (x, y): (Vec<NaiveDateTime>, Vec<f64>) = inflation_data.into_iter().unzip();
     let x: Vec<String> = x.into_iter().map(|d| format!("{d:?}")).collect();
     let chart_html = format!(r#"
@@ -164,19 +167,9 @@ async fn inflation(Query(params): Query<HashMap<String, String>>, Extension(pool
     );
     </script>
     "#);
-    if params.get("timeframe").is_none() {
-        if is_chart {
-            Html(format!("{header}{dropdown}<div id=\"inflation-viz\">{chart_html}</div>"))
-        } else {
-            Html(format!("{header}{dropdown}<table id=\"inflation-viz\" class=\"table table-sm\">{output_html}</table>"))
-        }
-    } else {
-        if is_chart {
-            Html(format!("<div id=\"inflation-viz\">{chart_html}</div>"))
-        } else {
-            Html(format!("<table id=\"inflation-viz\" class=\"table table-sm\">{output_html}</table>"))
-        }
-    }
+
+    let output_html = if is_chart {chart_html} else {table_html};
+    Html(format!(r#"<div id="inflation-viz">{output_html}</div>"#))
 }
 
 
