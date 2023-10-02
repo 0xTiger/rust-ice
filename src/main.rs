@@ -120,11 +120,16 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
         }
         inflation_data.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
     }
-    let final_table: Vec<String> = inflation_data.iter().map(|(dt, val)| (dt.date(), val)).map(|(dt, val)| format!("<tr><td>{dt}</td><td>{val:.3}</td></tr>")).collect();
+
+
+    let final_table: Vec<String> = inflation_data
+    .iter()
+    .map(|(dt, val)| format!("<tr><td>{}</td><td>{:.3}</td></tr>", dt.date(), val))
+    .collect();
     let table_html = format!(r#"<table class="table table-sm">{}</table>"#, final_table.join(""));
 
     let (x, y): (Vec<NaiveDateTime>, Vec<f64>) = inflation_data.into_iter().unzip();
-    let x: Vec<String> = x.into_iter().map(|d| format!("{d:?}")).collect();
+    let x: Vec<String> = x.into_iter().map(|d| d.date().to_string()).collect();
     let chart_html = format!(r#"
     <div class="chart-container" style="position: relative; height: 70vh; width: 100vw;">
         <canvas id="inflation-chart"></canvas>
@@ -132,10 +137,12 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
 
     <script>
     var datasets = [{{
-        label: "myfirstdataset",
+        label: "inflation",
         data: {y:?},
         pointHitRadius: 10,
         pointRadius: 0,
+        borderColor: "black",
+        backgroundColor: "black"
 
     }}];
     var labels = {x:?};
@@ -152,8 +159,12 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
             scales: {{
                 y: {{
                     grace: "20%",
-                    stacked: true
                 }},
+                x: {{
+                    grid: {{
+                        display: false
+                    }}
+                }}
             }},
             animation: {{
                 duration: 0,
