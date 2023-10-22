@@ -190,7 +190,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
 
 async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
-    let result: Result<(i32, String, i64, String, String, f64, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
+    let result: Result<(i32, String, i64, String, String, Option<f64>, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
         "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
         FROM product
         WHERE gtin = $1
@@ -217,7 +217,7 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
     let query = format!("%{}%", params.get("query").unwrap());
     let default_sort = &"name".to_string();
     let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
-    let result: Result<Vec<(i32, String, i64, String, String, f64, i32, String, f64, String, String)>, sqlx::Error> = sqlx::query_as(
+    let result: Result<Vec<(i32, String, i64, String, String, Option<f64>, i32, String, f64, String, String)>, sqlx::Error> = sqlx::query_as(
         format!(
             "SELECT * FROM (
                 SELECT DISTINCT ON (gtin) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
@@ -262,7 +262,7 @@ struct Product {
     sku: i64,
     image: String,
     description: String,
-    rating: f64,
+    rating: Option<f64>,
     review_count: i32,
     brand: String,
     price: f64,
