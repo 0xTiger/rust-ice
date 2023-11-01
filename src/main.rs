@@ -84,13 +84,14 @@ async fn inflation() -> Html<String> {
 
 
 async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(NaiveDateTime, f64)> {
-    let query = "
-    SELECT gtin, ARRAY_AGG(price ORDER BY scraped), ARRAY_AGG(scraped ORDER BY scraped)
-    FROM product
-    GROUP BY gtin
-    HAVING COUNT(*) >= 2";
+
+    use std::time::Instant;
+    let now = Instant::now();
+
+    let query = "SELECT gtin, price, scraped FROM price_history";
     let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
     let result = result.unwrap();
+    println!("Query done in: {:.4?}", now.elapsed());
 
     let dts_to_check: Vec<NaiveDateTime> = (0..100)
         .into_iter()
@@ -110,6 +111,54 @@ async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(Naive
         }
         inflation_data.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
     }
+    println!("Total: {:.4?}", now.elapsed());
+    inflation_data
+}
+
+
+async fn calc_inflation_rate2(pool: Pool<Postgres>, timeframe: u64) -> Vec<(NaiveDateTime, f64)> {
+
+    use std::time::Instant;
+    let now = Instant::now();
+
+    let query = "
+    SELECT DATE_TRUNC('day', to_date), 1 + AVG(increase / years) / 365 FROM
+        (
+        SELECT
+            gtin,
+            price,
+            price / LAG(price) OVER (PARTITION BY gtin ORDER BY scraped) - 1 AS increase,
+            LAG(scraped) OVER (PARTITION BY gtin ORDER BY scraped) from_date,
+            scraped AS to_date,
+            EXTRACT(epoch FROM 
+                    scraped - LAG(scraped) OVER (PARTITION BY gtin ORDER BY scraped)
+            ) / (60 * 60 * 24 * 365.25) AS years
+        
+        FROM product
+        WHERE price > 0
+        ORDER BY gtin, scraped
+        ) t1
+    WHERE increase IS NOT NULL AND years > 0
+    GROUP BY DATE_TRUNC('day', to_date)
+    ORDER BY DATE_TRUNC('day', to_date)
+    ";
+    let result: Result<Vec<(NaiveDateTime, f64)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
+    println!("Query done in: {:.4?}", now.elapsed());
+
+    let dts_to_check: Vec<NaiveDateTime> = (0..100)
+        .into_iter()
+        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*timeframe)).collect();
+
+    let random_dt = NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+
+    let inflation_data = result.unwrap();
+    let inflation_data = inflation_data.into_iter().scan((random_dt, 1.0), |state, x| {
+        state.0 = x.0;
+        state.1 = state.1 * x.1;
+        Some(*state)
+    }).collect();
+
+    println!("Total: {:.4?}", now.elapsed());
     inflation_data
 }
 
@@ -125,7 +174,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
         _ => 1
     };
     let is_chart = timeframe_parts[1] == "chart";
-    let inflation_data = calc_inflation_rate(pool, timeframe).await;
+    let inflation_data = calc_inflation_rate2(pool, timeframe).await;
     let final_table: Vec<String> = inflation_data
     .iter()
     .map(|(dt, val)| format!("<tr><td>{}</td><td>{:.3}</td></tr>", dt.date(), val))
