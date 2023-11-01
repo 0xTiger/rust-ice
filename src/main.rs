@@ -1,3 +1,4 @@
+use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use chrono::{NaiveDateTime, NaiveDate, Days};
 use std::net::SocketAddr;
@@ -123,8 +124,6 @@ async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(Naive
 
 
 async fn calc_inflation_rate2(pool: Pool<Postgres>, timeframe: u64, namefilter: Option<&String>) -> Vec<(NaiveDateTime, f64)> {
-
-    use std::time::Instant;
     let now = Instant::now();
 
     let query = "
@@ -151,19 +150,16 @@ async fn calc_inflation_rate2(pool: Pool<Postgres>, timeframe: u64, namefilter: 
     let result: Result<Vec<(NaiveDateTime, f64)>, sqlx::Error> = sqlx::query_as(query).bind(namefilter.unwrap_or(&"".to_string())).fetch_all(&pool).await;
     println!("Query done in: {:.4?}", now.elapsed());
 
-    let dts_to_check: Vec<NaiveDateTime> = (0..100)
-        .into_iter()
-        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*timeframe)).collect();
-
     let random_dt = NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
 
-    let inflation_data = result.unwrap();
-    println!("{:?}", inflation_data);
-    let inflation_data = inflation_data.into_iter().scan((random_dt, 1.0), |state, x| {
+    let mut inflation_data = result.unwrap();
+    inflation_data.insert(0, (random_dt, 1.0));
+    inflation_data = inflation_data.into_iter().scan((random_dt, 1.0), |state, x| {
         state.0 = x.0;
         state.1 = state.1 * x.1;
         Some(*state)
     }).collect();
+
 
     println!("Total: {:.4?}", now.elapsed());
     inflation_data
