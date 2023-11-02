@@ -69,6 +69,7 @@ async fn inflation() -> Html<String> {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     "#;
     let dropdown = r##"
     <select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
@@ -218,6 +219,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
                     grace: "20%",
                 }},
                 x: {{
+                    type: 'time',
                     grid: {{
                         display: false
                     }}
