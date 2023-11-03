@@ -246,7 +246,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
 
 async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
-    let result: Result<(i32, String, i64, String, String, Option<f64>, i32, String, f64, String, String), sqlx::Error> = sqlx::query_as(
+    let result: Result<Product, sqlx::Error> = sqlx::query_as(
         "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
         FROM product
         WHERE gtin = $1
@@ -258,22 +258,15 @@ async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>
     match result {
         Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
         Err(value) => {panic!("{}", value)}
-        Ok(row) => {
-            let (gtin, name, sku, image, description, rating, review_count, brand, price, url, availability) = row;
-            let prod = Product { gtin: gtin, name: name, sku: sku, image: image, description: description,
-                rating: rating, review_count: review_count, brand: brand,
-                price: price, url: url, availability: availability};
-            Json(prod).into_response()
-        }
+        Ok(product) => {Json(product).into_response()}
     }
 }
 
 async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
-
     let query = format!("%{}%", params.get("query").unwrap());
     let default_sort = &"name".to_string();
     let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
-    let result: Result<Vec<(i32, String, i64, String, String, Option<f64>, i32, String, f64, String, String)>, sqlx::Error> = sqlx::query_as(
+    let result: Result<Vec<Product>, sqlx::Error> = sqlx::query_as(
         format!(
             "SELECT * FROM (
                 SELECT DISTINCT ON (gtin) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
@@ -291,36 +284,26 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
     match result {
         Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
         Err(value) => {panic!("{}", value)}
-        Ok(rows) => {
-
-            let mut prods = Vec::new();
-            for (gtin, name, sku, image, description, rating, review_count, brand, price, url, availability) in rows {
-                let prod = Product { gtin: gtin, name: name, sku: sku, image: image, description: description,
-                    rating: rating, review_count: review_count, brand: brand,
-                    price: price, url: url, availability: availability};
-                prods.push(prod);
-            }
-            Json(prods).into_response()
-        }
+        Ok(rows) => {Json(rows).into_response()}
     }
 }
 
 async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
-    let result: Result<(sqlx::types::Json<DebugInfo>,), sqlx::Error> = sqlx::query_as(
+    let result: (sqlx::types::Json<DebugInfo>,) = sqlx::query_as(
         "SELECT json_build_object(
             'total', (SELECT COUNT(*) FROM product),
             'unique', (SELECT COUNT(DISTINCT gtin) FROM product),
             'outdated', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped < NOW() - INTERVAL '7 Days'),
             'notyetscraped', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped IS NULL)
         )"
-    ).fetch_one(&pool).await;
+    ).fetch_one(&pool).await.unwrap();
 
 
-    let debug_info = result.unwrap().0;
-    let total = debug_info.0.total;
-    let outdated = debug_info.0.outdated;
-    let unique = debug_info.0.unique;
-    let notyetscraped = debug_info.0.notyetscraped;
+    let debug_info = result.0.0;
+    let total = debug_info.total;
+    let outdated = debug_info.outdated;
+    let unique = debug_info.unique;
+    let notyetscraped = debug_info.notyetscraped;
     let header = r#"
     <!DOCTYPE html>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
@@ -347,6 +330,7 @@ struct JStatus {
 }
 
 
+#[derive(sqlx::FromRow)]
 #[derive(Serialize)]
 struct Product {
     gtin: i32,
