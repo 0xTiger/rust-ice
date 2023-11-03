@@ -41,6 +41,7 @@ async fn main() {
         .route("/inflation-viz", get(inflation_viz))
         .route("/product/:product_id", get(product))
         .route("/product/search", get(search))
+        .route("/debug-dashboard", get(debug_dashboard))
         .layer(Extension(pool));
 
     // run our app with hyper
@@ -304,6 +305,42 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
     }
 }
 
+async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
+    let result: Result<(sqlx::types::Json<DebugInfo>,), sqlx::Error> = sqlx::query_as(
+        "SELECT json_build_object(
+            'total', (SELECT COUNT(*) FROM product),
+            'unique', (SELECT COUNT(DISTINCT gtin) FROM product),
+            'outdated', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped < NOW() - INTERVAL '7 Days'),
+            'notyetscraped', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped IS NULL)
+        )"
+    ).fetch_one(&pool).await;
+
+
+    let debug_info = result.unwrap().0;
+    let total = debug_info.0.total;
+    let outdated = debug_info.0.outdated;
+    let unique = debug_info.0.unique;
+    let notyetscraped = debug_info.0.notyetscraped;
+    let header = r#"
+    <!DOCTYPE html>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    "#;
+    let output_html = format!(r#"
+    <div hx-get="/debug-dashboard" hx-trigger="every 1s">
+    <table class="table">
+    <tr><td>Total</td><td>{total}</td><tr>
+    <tr><td>Outdated</td><td>{outdated}</td><tr>
+    <tr><td>Unique</td><td>{unique}</td><tr>
+    <tr><td>Not Yet Scraped</td><td>{notyetscraped}</td><tr>
+    </table>
+    </div>"#);
+    return Html(header.to_owned() + &output_html)
+}
+
+
 #[derive(Serialize)]
 struct JStatus {
     detail: bool,
@@ -323,4 +360,12 @@ struct Product {
     price: f64,
     url: String,
     availability: String
+}
+
+#[derive(Deserialize)]
+struct DebugInfo {
+    total: i64,
+    unique: i64,
+    outdated: i64,
+    notyetscraped: i64,
 }
