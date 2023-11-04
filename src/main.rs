@@ -1,4 +1,5 @@
 use std::time::Instant;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use chrono::{NaiveDateTime, NaiveDate, Days};
 use std::net::SocketAddr;
@@ -42,6 +43,8 @@ async fn main() {
         .route("/product/:product_id", get(product))
         .route("/product/search", get(search))
         .route("/debug-dashboard", get(debug_dashboard))
+        .route("/search-pretty-results", get(search_pretty_results))
+        .route("/search", get(search_pretty_page))
         .layer(Extension(pool));
 
     // run our app with hyper
@@ -262,10 +265,8 @@ async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>
     }
 }
 
-async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
-    let query = format!("%{}%", params.get("query").unwrap());
-    let default_sort = &"name".to_string();
-    let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
+
+async fn search_for_product(query: String, sort: &String, pool: PgPool) -> Result<Vec<Product>, sqlx::Error>{
     let result: Result<Vec<Product>, sqlx::Error> = sqlx::query_as(
         format!(
             "SELECT * FROM (
@@ -280,6 +281,15 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
     )
     .bind(query).bind(sort) 
     .fetch_all(&pool).await;
+    return result
+}
+
+
+async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
+    let query = format!("%{}%", params.get("query").unwrap());
+    let default_sort = &"name".to_string();
+    let sort = params.get("sort").unwrap_or(default_sort); // SANITIZE THIS!!
+    let result = search_for_product(query, sort, pool).await;
 
     match result {
         Err(Error::RowNotFound) => {StatusCode::NOT_FOUND.into_response()}
@@ -287,6 +297,51 @@ async fn search(Query(params): Query<HashMap<String, String>>, Extension(pool): 
         Ok(rows) => {Json(rows).into_response()}
     }
 }
+
+
+async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> Html<String> {
+    let mut query = format!("%{}%", params.get("query").unwrap());
+    if params.get("query").unwrap() == "" {
+        query = format!("%pasta%")
+    }
+    let result = search_for_product(query, &"name".to_string(), pool).await.unwrap();
+
+    let results_html: String = result.iter().map(|product| {
+        let name = &product.name;
+        let price = &product.price;
+        let brand = &product.brand;
+        let rating = &product.rating.unwrap_or(0.0);
+        let image = &product.image;
+        format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td>£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
+    }).join("\n");
+    let output_html = format!(r#"
+    <table class="table" id="search-results">
+    {results_html}
+    </table>"#);
+    return Html(output_html)
+}
+
+
+async fn search_pretty_page() -> Html<String> {
+    let header = r#"
+    <!DOCTYPE html>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    "#;
+    let output_html = format!(r##"
+    <input class="form-control" type="search"
+       name="query" placeholder="Begin Typing To Search Products..." 
+       hx-get="/search-pretty-results" 
+       hx-trigger="keyup changed delay:200ms, search" 
+       hx-target="#search-results"
+       hx-indicator="#search-results">
+    </div>
+    <div id="search-results"></div>"##);
+    return Html(header.to_owned() + &output_html)
+}
+
 
 async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
     let result: (sqlx::types::Json<DebugInfo>,) = sqlx::query_as(
