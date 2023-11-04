@@ -1,10 +1,10 @@
-use std::time::Instant;
-use itertools::Itertools;
+use std::{
+    time::Instant,
+    net::SocketAddr,
+    collections::HashMap
+};
 use serde::{Deserialize, Serialize};
 use chrono::{NaiveDateTime, NaiveDate, Days};
-use std::net::SocketAddr;
-use std::env;
-use std::collections::HashMap;
 use dotenv::dotenv;
 use axum::{
     extract::Path,
@@ -17,22 +17,30 @@ use axum::{
     Extension,
 };
 use sqlx::{
-    postgres::PgPoolOptions,
     Error,
-    PgPool, Pool, Postgres,
+    PgPool,
+    Pool,
+    Postgres,
 };
+
+mod db;
+use db::{
+    db_conn,
+    Product,
+    DebugInfo
+};
+
+
+#[derive(Serialize)]
+struct JStatus {
+    detail: bool,
+}
+
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-    let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
-    let pg_user: String = env::var("POSTGRES_USER").expect("$POSTGRES_PASSWORD is not set");
-
-    let pool = PgPoolOptions::new()
-    .max_connections(5)
-    .connect(format!("postgres://{pg_user}:{pg_password}@localhost:5444/supermarket").as_str())
-    .await.unwrap();
-
+    let pool = db_conn().await;
     tracing_subscriber::fmt::init();
 
     let app = Router::new()
@@ -57,6 +65,7 @@ async fn main() {
         .unwrap();
 }
 
+
 async fn root() -> &'static str {
     "Hello, World!"
 }
@@ -70,10 +79,12 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 async fn inflation() -> Html<String> {
     let header = r#"
     <!DOCTYPE html>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    </head>
     "#;
     let dropdown = r##"
     <select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
@@ -96,8 +107,6 @@ async fn inflation() -> Html<String> {
 
 
 async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(NaiveDateTime, f64)> {
-
-    use std::time::Instant;
     let now = Instant::now();
 
     let query = "SELECT gtin, price, scraped FROM price_history";
@@ -184,11 +193,12 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
     };
     let is_chart = timeframe_parts[1] == "chart";
     let inflation_data = calc_inflation_rate2(pool, timeframe, namefilter).await;
-    let final_table: Vec<String> = inflation_data
-    .iter()
-    .map(|(dt, val)| format!("<tr><td>{}</td><td>{:.3}</td></tr>", dt.date(), val))
-    .collect();
-    let table_html = format!(r#"<table class="table table-sm">{}</table>"#, final_table.join(""));
+    let final_table: String = inflation_data
+        .iter()
+        .map(|(dt, val)| format!("<tr><td>{}</td><td>{:.3}</td></tr>", dt.date(), val))
+        .collect::<Vec<String>>()
+        .join("\n");
+    let table_html = format!(r#"<table class="table table-sm">{final_table}</table>"#);
 
     let (x, y): (Vec<NaiveDateTime>, Vec<f64>) = inflation_data.into_iter().unzip();
     let x: Vec<String> = x.into_iter().map(|d| d.date().to_string()).collect();
@@ -306,14 +316,17 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
     }
     let result = search_for_product(query, &"name".to_string(), pool).await.unwrap();
 
-    let results_html: String = result.iter().map(|product| {
-        let name = &product.name;
-        let price = &product.price;
-        let brand = &product.brand;
-        let rating = &product.rating.unwrap_or(0.0);
-        let image = &product.image;
-        format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td>£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
-    }).join("\n");
+    let results_html: String = result.iter()
+        .map(|product| {
+            let name = &product.name;
+            let price = &product.price;
+            let brand = &product.brand;
+            let rating = &product.rating.unwrap_or(0.0);
+            let image = &product.image;
+            format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td>£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
     let output_html = format!(r#"
     <table class="table" id="search-results">
     {results_html}
@@ -325,10 +338,12 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
 async fn search_pretty_page() -> Html<String> {
     let header = r#"
     <!DOCTYPE html>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    </head>
     "#;
     let output_html = format!(r##"
     <input class="form-control" type="search"
@@ -361,10 +376,12 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
     let notyetscraped = debug_info.notyetscraped;
     let header = r#"
     <!DOCTYPE html>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    </head>
     "#;
     let output_html = format!(r#"
     <div hx-get="/debug-dashboard" hx-trigger="every 1s">
@@ -376,35 +393,4 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
     </table>
     </div>"#);
     return Html(header.to_owned() + &output_html)
-}
-
-
-#[derive(Serialize)]
-struct JStatus {
-    detail: bool,
-}
-
-
-#[derive(sqlx::FromRow)]
-#[derive(Serialize)]
-struct Product {
-    gtin: i32,
-    name: String,
-    sku: i64,
-    image: String,
-    description: String,
-    rating: Option<f64>,
-    review_count: i32,
-    brand: String,
-    price: f64,
-    url: String,
-    availability: String
-}
-
-#[derive(Deserialize)]
-struct DebugInfo {
-    total: i64,
-    unique: i64,
-    outdated: i64,
-    notyetscraped: i64,
 }
