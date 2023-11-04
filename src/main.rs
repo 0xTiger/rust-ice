@@ -43,13 +43,15 @@ async fn main() {
     let pool = db_conn().await;
     tracing_subscriber::fmt::init();
 
-    let app = Router::new()
-        .route("/", get(root))
+    let api_routes = Router::new()
         .route("/ping", get(ping))
+        .route("/product/:product_id", get(product))
+        .route("/product/search", get(search));
+    let app = Router::new()
+        .nest("/api", api_routes)
+        .route("/", get(root))
         .route("/inflation", get(inflation))
         .route("/inflation-viz", get(inflation_viz))
-        .route("/product/:product_id", get(product))
-        .route("/product/search", get(search))
         .route("/debug-dashboard", get(debug_dashboard))
         .route("/search-pretty-results", get(search_pretty_results))
         .route("/search", get(search_pretty_page))
