@@ -65,6 +65,17 @@ async fn main() {
         .unwrap();
 }
 
+fn get_header() -> String {
+    r#"
+    <!DOCTYPE html>
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    </head>
+    "#.to_string()
+}
 
 async fn root() -> &'static str {
     "Hello, World!"
@@ -77,15 +88,7 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
 
 
 async fn inflation() -> Html<String> {
-    let header = r#"
-    <!DOCTYPE html>
-    <head>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    </head>
-    "#;
+    let header = get_header();
     let dropdown = r##"
     <select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
         <option value="day-chart">Day Chart</option>
@@ -336,15 +339,7 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
 
 
 async fn search_pretty_page() -> Html<String> {
-    let header = r#"
-    <!DOCTYPE html>
-    <head>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    </head>
-    "#;
+    let header = get_header();
     let output_html = format!(r##"
     <input class="form-control" type="search"
        name="query" placeholder="Begin Typing To Search Products..." 
@@ -359,6 +354,7 @@ async fn search_pretty_page() -> Html<String> {
 
 
 async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
+    let header = get_header();
     let result: (sqlx::types::Json<DebugInfo>,) = sqlx::query_as(
         "SELECT json_build_object(
             'total', (SELECT COUNT(*) FROM product),
@@ -374,15 +370,7 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
     let outdated = debug_info.outdated;
     let unique = debug_info.unique;
     let notyetscraped = debug_info.notyetscraped;
-    let header = r#"
-    <!DOCTYPE html>
-    <head>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    </head>
-    "#;
+
     let output_html = format!(r#"
     <div hx-get="/debug-dashboard" hx-trigger="every 1s">
     <table class="table">
