@@ -75,6 +75,7 @@ fn get_header() -> String {
         <script src="https://unpkg.com/htmx.org@1.9.6"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+        <link rel="stylesheet" href="main.css">
     </head>
     "#.to_string()
 }
@@ -343,13 +344,30 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
 async fn search_pretty_page() -> Html<String> {
     let header = get_header();
     let output_html = format!(r##"
-    <input class="form-control" type="search"
-       name="query" placeholder="Begin Typing To Search Products..." 
-       hx-get="/search-pretty-results" 
-       hx-trigger="keyup changed delay:200ms, search" 
-       hx-target="#search-results"
-       hx-indicator="#search-results">
+
+    <div class="container">
+
+    <div class="row height d-flex justify-content-center align-items-center">
+
+      <div class="col-md-6">
+
+        <div class="form">
+          <i class="fa fa-search"></i>
+          <input class="form-control form-input" type="search"
+          name="query" placeholder="Begin Typing To Search Products..." 
+          hx-get="/search-pretty-results" 
+          hx-trigger="keyup changed delay:200ms, search" 
+          hx-target="#search-results"
+          hx-indicator="#search-results">
+          <span class="left-pan"><i class="fa fa-microphone"></i></span>
+        </div>
+        
+      </div>
+      
     </div>
+    
+    </div>
+
     <div id="search-results"></div>"##);
     return Html(header.to_owned() + &output_html)
 }
