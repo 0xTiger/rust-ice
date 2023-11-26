@@ -22,6 +22,7 @@ use sqlx::{
     Pool,
     Postgres,
 };
+use askama::Template;
 
 mod db;
 use db::{
@@ -67,18 +68,6 @@ async fn main() {
         .unwrap();
 }
 
-fn get_header() -> String {
-    r#"
-    <!DOCTYPE html>
-    <head>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-        <link rel="stylesheet" href="main.css">
-    </head>
-    "#.to_string()
-}
 
 async fn root() -> &'static str {
     "Hello, World!"
@@ -89,26 +78,13 @@ async fn ping() -> (StatusCode, Json<JStatus>) {
     (StatusCode::OK, Json(JStatus { detail: true }))
 }
 
+#[derive(Template)]
+#[template(path="inflation.html")]
+struct InflationTemplate {}
 
 async fn inflation() -> Html<String> {
-    let header = get_header();
-    let dropdown = r##"
-    <select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
-        <option value="day-chart">Day Chart</option>
-        <option value="week-chart">Week Chart</option>
-        <option value="month-chart">Month Chart</option>
-        <option value="day-table">Day Table</option>
-        <option value="week-table">Week Table</option>
-        <option value="month-table">Month Table</option>
-    </select>
-    <input type="text" name="q"
-    hx-get="/inflation-viz"
-    hx-trigger="keyup change delay:500ms"
-    hx-target="#inflation-viz"
-    placeholder="Search..."
-    >
-    "##;
-    Html(format!(r#"{header}{dropdown}<div id="inflation-viz" hx-get="/inflation-viz?timeframe=day-chart" hx-trigger="load"></div>"#))
+    let inflation_template = InflationTemplate {};
+    Html(inflation_template.render().unwrap())
 }
 
 
@@ -341,40 +317,27 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
 }
 
 
+#[derive(Template)]
+#[template(path="search.html")]
+struct SearchTemplate {}
+
+
 async fn search_pretty_page() -> Html<String> {
-    let header = get_header();
-    let output_html = format!(r##"
+    let search_template = SearchTemplate {};
+    return Html(search_template.render().unwrap())
+}
 
-    <div class="container">
-
-    <div class="row height d-flex justify-content-center align-items-center">
-
-      <div class="col-md-6">
-
-        <div class="form">
-          <i class="fa fa-search"></i>
-          <input class="form-control form-input" type="search"
-          name="query" placeholder="Begin Typing To Search Products..." 
-          hx-get="/search-pretty-results" 
-          hx-trigger="keyup changed delay:200ms, search" 
-          hx-target="#search-results"
-          hx-indicator="#search-results">
-          <span class="left-pan"><i class="fa fa-microphone"></i></span>
-        </div>
-        
-      </div>
-      
-    </div>
-    
-    </div>
-
-    <div id="search-results"></div>"##);
-    return Html(header.to_owned() + &output_html)
+#[derive(Template)]
+#[template(path="debug_dashboard.html")]
+struct DebugDashboardTemplate {
+    total: i64,
+    outdated: i64,
+    unique: i64,
+    notyetscraped: i64,
 }
 
 
 async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
-    let header = get_header();
     let result: (sqlx::types::Json<DebugInfo>,) = sqlx::query_as(
         "SELECT json_build_object(
             'total', (SELECT COUNT(*) FROM product),
@@ -386,19 +349,11 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
 
 
     let debug_info = result.0.0;
-    let total = debug_info.total;
-    let outdated = debug_info.outdated;
-    let unique = debug_info.unique;
-    let notyetscraped = debug_info.notyetscraped;
-
-    let output_html = format!(r#"
-    <div hx-get="/debug-dashboard" hx-trigger="every 1s">
-    <table class="table">
-    <tr><td>Total</td><td>{total}</td><tr>
-    <tr><td>Outdated</td><td>{outdated}</td><tr>
-    <tr><td>Unique</td><td>{unique}</td><tr>
-    <tr><td>Not Yet Scraped</td><td>{notyetscraped}</td><tr>
-    </table>
-    </div>"#);
-    return Html(header.to_owned() + &output_html)
+    let debug_dashboard_template = DebugDashboardTemplate {
+        total:  debug_info.total,
+        outdated:  debug_info.outdated,
+        unique:  debug_info.unique,
+        notyetscraped:  debug_info.notyetscraped
+    };
+    return Html(debug_dashboard_template.render().unwrap())
 }

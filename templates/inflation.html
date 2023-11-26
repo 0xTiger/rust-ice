@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<select name="timeframe" hx-get="/inflation-viz" hx-target="#inflation-viz" hx-swap="outerHTML">
+    <option value="day-chart">Day Chart</option>
+    <option value="week-chart">Week Chart</option>
+    <option value="month-chart">Month Chart</option>
+    <option value="day-table">Day Table</option>
+    <option value="week-table">Week Table</option>
+    <option value="month-table">Month Table</option>
+</select>
+<input type="text" name="q"
+hx-get="/inflation-viz"
+hx-trigger="keyup change delay:500ms"
+hx-target="#inflation-viz"
+placeholder="Search..."
+>
+<div id="inflation-viz" hx-get="/inflation-viz?timeframe=day-chart" hx-trigger="load"></div>
+{% endblock %}
