@@ -10,7 +10,7 @@ use axum::{
     extract::Path,
     extract::Query,
     http::StatusCode,
-    response::{IntoResponse, Html},
+    response::{IntoResponse, Html, Response},
     routing::{get, post},
     Json,
     Router,
@@ -51,6 +51,7 @@ async fn main() {
     let app = Router::new()
         .nest("/api", api_routes)
         .route("/", get(root))
+        .route("/styles", get(styles))
         .route("/inflation", get(inflation))
         .route("/inflation-viz", get(inflation_viz))
         .route("/debug-dashboard", get(debug_dashboard))
@@ -87,6 +88,13 @@ async fn inflation() -> Html<String> {
     Html(inflation_template.render().unwrap())
 }
 
+async fn styles() -> impl IntoResponse {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/css")
+        .body(include_str!("../templates/styles.css").to_owned())
+        .unwrap() 
+}
 
 async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(NaiveDateTime, f64)> {
     let now = Instant::now();
