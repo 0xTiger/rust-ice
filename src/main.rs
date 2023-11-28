@@ -3,15 +3,15 @@ use std::{
     net::SocketAddr,
     collections::HashMap
 };
-use serde::{Deserialize, Serialize};
-use chrono::{NaiveDateTime, NaiveDate, Days};
+use serde::Serialize;
+use chrono::{NaiveDateTime, NaiveDate};
 use dotenv::dotenv;
 use axum::{
     extract::Path,
     extract::Query,
     http::StatusCode,
     response::{IntoResponse, Html, Response},
-    routing::{get, post},
+    routing::get,
     Json,
     Router,
     Extension,
@@ -96,38 +96,8 @@ async fn styles() -> impl IntoResponse {
         .unwrap() 
 }
 
-async fn calc_inflation_rate(pool: Pool<Postgres>, timeframe: u64) -> Vec<(NaiveDateTime, f64)> {
-    let now = Instant::now();
 
-    let query = "SELECT gtin, price, scraped FROM price_history";
-    let result: Result<Vec<(i32, Vec<f64>, Vec<NaiveDateTime>)>, sqlx::Error> = sqlx::query_as(query).fetch_all(&pool).await;
-    let result = result.unwrap();
-    println!("Query done in: {:.4?}", now.elapsed());
-
-    let dts_to_check: Vec<NaiveDateTime> = (0..100)
-        .into_iter()
-        .map(|n| NaiveDate::from_ymd_opt(2023, 8, 1).unwrap().and_hms_opt(0, 0, 0).unwrap() + Days::new(n*timeframe)).collect();
-    let mut inflation_data = Vec::new();
-    for dt in dts_to_check {
-        let mut relevant_prices = Vec::new();
-        for (_gtin, prices, scraped) in &result {
-            let idx = match scraped.binary_search(&dt) {
-                Ok(x) => x,
-                Err(x) => x.saturating_sub(1)
-            };
-            if prices[0] == 0.0 {
-                continue
-            }
-            relevant_prices.push(prices[idx] / prices[0]);
-        }
-        inflation_data.push((dt, relevant_prices.iter().sum::<f64>() / relevant_prices.len() as f64));
-    }
-    println!("Total: {:.4?}", now.elapsed());
-    inflation_data
-}
-
-
-async fn calc_inflation_rate2(pool: Pool<Postgres>, timeframe: u64, namefilter: Option<&String>) -> Vec<(NaiveDateTime, f64)> {
+async fn calc_inflation_rate2(pool: Pool<Postgres>, namefilter: Option<&String>) -> Vec<(NaiveDateTime, f64)> {
     let now = Instant::now();
 
     let query = "
@@ -171,18 +141,9 @@ async fn calc_inflation_rate2(pool: Pool<Postgres>, timeframe: u64, namefilter: 
 
 
 async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(pool): Extension<PgPool>) -> Html<String> {
-    let timeframe_default = &"day-chart".to_owned();
-    let timeframe = params.get("timeframe").unwrap_or(timeframe_default).as_str();
     let namefilter = params.get("q");
-    let timeframe_parts = timeframe.split("-").collect::<Vec<&str>>();
-    let timeframe = match timeframe_parts[0] {
-        "day" => 1,
-        "week" => 7,
-        "month" => 30,
-        _ => 1
-    };
-    let is_chart = timeframe_parts[1] == "chart";
-    let inflation_data = calc_inflation_rate2(pool, timeframe, namefilter).await;
+    let is_table = params.get("table").is_some();
+    let inflation_data = calc_inflation_rate2(pool, namefilter).await;
     let final_table: String = inflation_data
         .iter()
         .map(|(dt, val)| format!("<tr><td>{}</td><td>{:.3}</td></tr>", dt.date(), val))
@@ -242,7 +203,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
     </script>
     "#);
 
-    let output_html = if is_chart {chart_html} else {table_html};
+    let output_html = if is_table {table_html} else {chart_html};
     Html(format!(r#"<div id="inflation-viz">{output_html}</div>"#))
 }
 
