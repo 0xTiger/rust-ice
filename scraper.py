@@ -3,12 +3,10 @@ from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.by import By
 
 from db import db_ctx, Product, ProductScrapeStatus
@@ -27,18 +25,32 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
+class wait_for_product_jsonld:
+    def __call__(self, driver):
+        try:
+            jsonld_element = driver.find_element(
+                By.CSS_SELECTOR,
+                'script[type="application/ld+json"]:last-of-type'
+            )
+            self.jsonld = jsonld_element.get_property('innerHTML')
+            return '"@type":"Product"' in self.jsonld
+        except StaleElementReferenceException:
+            return False
+        
+
 def scrape_asda_product(url: str):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
 
     browser = Chrome(options=chrome_options)
     browser.get(url)
-    condition = expected_conditions.presence_of_element_located((By.CLASS_NAME, "pdp-description-reviews__product-details-title"))
+    condition = wait_for_product_jsonld()
     try:
         WebDriverWait(browser, 30).until(condition)
     except TimeoutException:
         return 'FAILURE_TIMEOUT'
-    soup = BeautifulSoup(browser.page_source, features="html.parser")
+    json_ld = json.loads(condition.jsonld)
+    # soup = BeautifulSoup(browser.page_source, features="html.parser")
     browser.quit()
 
     # code = soup.find('span', class_='pdp-main-details__product-code').text.strip('Product code: ')
@@ -48,8 +60,7 @@ def scrape_asda_product(url: str):
     # nutritional_values = soup.find('div', class_='pdp-description-reviews__product-details-title', string='Nutritional Values').parent
     # net_content = soup.find('div', class_='pdp-description-reviews__product-details-title', string='Net Content').parent.find('div', class_='pdp-description-reviews__product-details-content').text
 
-    json_ld = json.loads(soup.find_all('script', type="application/ld+json")[-1].text)
-
+    # json_ld = json.loads(soup.find_all('script', type="application/ld+json")[-1].text)
     if 'name' not in json_ld:
         return 'FAILURE_MISSING_NAME'
 
