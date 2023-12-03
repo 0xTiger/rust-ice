@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 from sqlalchemy import text
@@ -33,7 +34,9 @@ class wait_for_product_jsonld:
                 'script[type="application/ld+json"]:last-of-type'
             )
             self.jsonld = jsonld_element.get_property('innerHTML')
-            return '"@type":"Product"' in self.jsonld
+            return re.search(r'"@type": ?"Product"', self.jsonld,
+                flags=re.IGNORECASE
+            ) is not None
         except StaleElementReferenceException:
             return False
 
@@ -48,8 +51,12 @@ def get_seller_from_url(url: str) -> str:
 
 
 def scrape_asda_product(url: str):
+    # Sainsbury's blocks requests whose User-Agent identifies them as a headless browser
+    # So we set it manually here.
+    USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+    chrome_options.add_argument(f"user-agent={USER_AGENT}")
 
     browser = Chrome(options=chrome_options)
     browser.get(url)
@@ -74,22 +81,41 @@ def scrape_asda_product(url: str):
         return 'FAILURE_MISSING_NAME'
 
     with db_ctx() as db:
-        product = Product(
-            gtin = json_ld['gtin'],
-            json_ld = json_ld,
-            name = json_ld['name'],
-            sku = json_ld['sku'],
-            image = json_ld['image'],
-            description = json_ld['description'],
-            rating = json_ld.get('aggregateRating', dict()).get('ratingValue'),
-            review_count = json_ld.get('aggregateRating', dict()).get('reviewCount', 0),
-            brand = json_ld['brand']['name'],
-            price = json_ld['offers']['price'],
-            url = json_ld['offers']['url'],
-            availability = json_ld['offers']['availability'],
-            seller = get_seller_from_url(url),
-            scraped = datetime.now()
-        )
+        seller = get_seller_from_url(url)
+        if seller == 'asda':
+            product = Product(
+                gtin = json_ld['gtin'],
+                json_ld = json_ld,
+                name = json_ld['name'],
+                sku = json_ld['sku'],
+                image = json_ld['image'],
+                description = json_ld['description'],
+                rating = json_ld.get('aggregateRating', dict()).get('ratingValue'),
+                review_count = json_ld.get('aggregateRating', dict()).get('reviewCount', 0),
+                brand = json_ld['brand']['name'],
+                price = json_ld['offers']['price'],
+                url = json_ld['offers']['url'],
+                availability = json_ld['offers']['availability'],
+                seller = seller,
+                scraped = datetime.now()
+            )
+        elif seller == 'sainsburys':
+            product = Product(
+                gtin = None,
+                json_ld = json_ld,
+                name = json_ld['name'],
+                sku = json_ld['sku'],
+                image = json_ld['image'],
+                description = json_ld['description'],
+                rating = json_ld.get('aggregateRating', dict()).get('ratingValue'),
+                review_count = json_ld.get('aggregateRating', dict()).get('reviewCount', 0),
+                brand = json_ld['brand']['name'],
+                price = json_ld['offers']['price'],
+                url = json_ld['url'],
+                availability = json_ld['offers']['availability'],
+                seller = seller,
+                scraped = datetime.now()
+            )         
         try:
             db.add(product)
             db.commit()

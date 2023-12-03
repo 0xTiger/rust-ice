@@ -2,6 +2,7 @@ import re
 import time
 import random
 from itertools import count
+import argparse
 
 from sqlalchemy import text
 from bs4 import BeautifulSoup
@@ -16,8 +17,20 @@ from selenium.common.exceptions import (
 from db import db_ctx
 from scraper import bcolors
 
-SELLER = 'asda'
-url = 'https://groceries.asda.com/'
+
+parser = argparse.ArgumentParser()
+parser.add_argument('supermarket', help='Supermarket to be scraped for new products')
+parser.add_argument('--automated', action='store_true')
+args = parser.parse_args()
+
+if args.supermarket == 'asda':
+    url = 'https://groceries.asda.com/'
+elif args.supermarket == 'sainsburys':
+    url = 'https://www.sainsburys.co.uk/shop/gb/groceries'
+else:
+    raise ValueError(f'Unknown supermarket {args.supermarket}')
+
+
 browser = Chrome()
 browser.get(url)
 
@@ -76,6 +89,21 @@ def nav_to_random_menu_item():
     return 'SUCCESS'
 
 
+def find_products_in_soup(soup: BeautifulSoup) -> set[str]:
+    if args.supermarket == 'asda':
+        found_products = {'https://groceries.asda.com/product/' + x.group(1) 
+            for x in re.finditer(r'/product/([\-/a-zA-Z0-9]+)', str(soup))
+        }
+    elif args.supermarket == 'sainsburys':
+        found_products = {'https://www.sainsburys.co.uk/gol-ui/product/' + x.group(2) 
+            for x in re.finditer(r'/product(/details)?/([\-/a-zA-Z0-9]+)', str(soup))
+        }
+    else:
+        raise ValueError(f'Unknown supermarket {args.supermarket}')
+
+    return found_products
+
+
 def save_product_urls():
     with db_ctx() as db:
         for url in found_products:
@@ -85,38 +113,35 @@ def save_product_urls():
                     VALUES (:url, :seller)
                     ON CONFLICT DO NOTHING
                 """),
-                dict(url=url, seller=SELLER)
+                dict(url=url, seller=args.supermarket)
             )
         db.commit()
 
-
-time.sleep(0.5)
-accept_cookies()
-time.sleep(0.5)
-open_menu()
-time.sleep(0.5)
-goto_groceries()
-time.sleep(0.5)
 with db_ctx() as db:
     existing_products = set(db.execute(text('SELECT url FROM product')).scalars())
 
+if args.automated:
+    time.sleep(0.5)
+    accept_cookies()
+    time.sleep(0.5)
+    open_menu()
+    time.sleep(0.5)
+    goto_groceries()
+    time.sleep(0.5)
+
+
 visited_cats = set()
 found_products = set()
-found_cats = set()
 for i in count():
     try:
         soup = BeautifulSoup(browser.page_source, features="html.parser")
-        found_products |= {'https://groceries.asda.com/product/' + x.group(1) 
-            for x in re.finditer(r'/product/([\-/a-zA-Z0-9]+)', str(soup))
-        }
-        found_cats |= {'https://groceries.asda.com/cat/' + x.group(1) 
-            for x in re.finditer(r'/cat/([menu_items\-/a-zA-Z0-9]+)', str(soup))
-        }
-        infostr = f'{len(found_cats)} {len(found_products)} {bcolors.GREEN}+({len(found_products - existing_products)}){bcolors.ENDC}'
-        print(infostr, flush=True, end='\r')
-        time.sleep(0.1)
+        found_products |= find_products_in_soup(soup)
 
-        if i % 5 == 0:
+        infostr = f'{len(found_products)} {bcolors.GREEN}+({len(found_products - existing_products)}){bcolors.ENDC}'
+        print(infostr, flush=True, end='\r')
+        time.sleep(0.1 if not args.automated else 0.5)
+
+        if args.automated and i % 5 == 0:
             time.sleep(0.5)
             try:
                 status = nav_to_random_menu_item()
