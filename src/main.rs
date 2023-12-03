@@ -211,7 +211,7 @@ async fn inflation_viz(Query(params): Query<HashMap<String, String>>, Extension(
 async fn product(Path(product_id): Path<i32>, Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
     let result: Result<Product, sqlx::Error> = sqlx::query_as(
-        "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+        "SELECT gtin, name, sku, image, description, rating, review_count, brand, price, url, availability, seller
         FROM product
         WHERE gtin = $1
         ORDER BY scraped DESC"
@@ -231,7 +231,7 @@ async fn search_for_product(query: String, sort: &String, pool: PgPool) -> Resul
     let result: Result<Vec<Product>, sqlx::Error> = sqlx::query_as(
         format!(
             "SELECT * FROM (
-                SELECT DISTINCT ON (seller, sku) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+                SELECT DISTINCT ON (seller, sku) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability, seller
                 FROM product
                 WHERE name ILIKE $1
                 ORDER BY seller, sku, scraped DESC
@@ -274,7 +274,12 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
             let brand = &product.brand;
             let rating = &product.rating.unwrap_or(0.0);
             let image = &product.image;
-            format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td>£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
+            let color = match product.seller.as_str() {
+                "asda" => "green",
+                "sainsburys" => "orange",
+                _ => "black"
+            };
+            format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td style="color: {color};">£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
         })
         .collect::<Vec<String>>()
         .join("\n");

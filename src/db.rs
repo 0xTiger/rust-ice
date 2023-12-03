@@ -19,7 +19,8 @@ pub struct Product {
     pub brand: String,
     pub price: f64,
     pub url: String,
-    pub availability: String
+    pub availability: String,
+    pub seller: String
 }
 
 #[derive(Deserialize)]
