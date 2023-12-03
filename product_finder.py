@@ -16,7 +16,7 @@ from selenium.common.exceptions import (
 from db import db_ctx
 from scraper import bcolors
 
-
+SELLER = 'asda'
 url = 'https://groceries.asda.com/'
 browser = Chrome()
 browser.get(url)
@@ -80,8 +80,12 @@ def save_product_urls():
     with db_ctx() as db:
         for url in found_products:
             db.execute(
-                text('INSERT INTO productscrapestatus (url) VALUES (:url) ON CONFLICT DO NOTHING'),
-                dict(url=url)
+                text("""
+                    INSERT INTO productscrapestatus (url, seller)
+                    VALUES (:url, :seller)
+                    ON CONFLICT DO NOTHING
+                """),
+                dict(url=url, seller=SELLER)
             )
         db.commit()
 

@@ -53,6 +53,7 @@ class Product(Base):
     url = Column(String)
     availability = Column(String)
     scraped = Column(DateTime)
+    seller = Column(String)
 
 
 class ProductScrapeStatus(Base):
@@ -63,3 +64,4 @@ class ProductScrapeStatus(Base):
     scrape_success = Column(Boolean)
     fail_reason = Column(String)
     last_scraped = Column(DateTime)
+    seller = Column(String)

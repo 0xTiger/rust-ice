@@ -36,7 +36,16 @@ class wait_for_product_jsonld:
             return '"@type":"Product"' in self.jsonld
         except StaleElementReferenceException:
             return False
-        
+
+
+def get_seller_from_url(url: str) -> str:
+    if url.startswith('https://groceries.asda.com'):
+        return 'asda'
+    elif url.startswith('https://www.sainsburys.co.uk'):
+        return 'sainsburys'
+    else:
+        raise ValueError(f'Cannot identify seller for url {url}')
+
 
 def scrape_asda_product(url: str):
     chrome_options = Options()
@@ -78,6 +87,7 @@ def scrape_asda_product(url: str):
             price = json_ld['offers']['price'],
             url = json_ld['offers']['url'],
             availability = json_ld['offers']['availability'],
+            seller = get_seller_from_url(url),
             scraped = datetime.now()
         )
         try:
