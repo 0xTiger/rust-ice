@@ -104,18 +104,18 @@ async fn calc_inflation_rate2(pool: Pool<Postgres>, namefilter: Option<&String>)
     SELECT DATE_TRUNC('day', to_date), 1 + AVG(increase / years) / 365 FROM
         (
         SELECT
-            gtin,
+            seller, sku,
             price,
-            price / LAG(price) OVER (PARTITION BY gtin ORDER BY scraped) - 1 AS increase,
-            LAG(scraped) OVER (PARTITION BY gtin ORDER BY scraped) from_date,
+            price / LAG(price) OVER (PARTITION BY seller, sku ORDER BY scraped) - 1 AS increase,
+            LAG(scraped) OVER (PARTITION BY seller, sku ORDER BY scraped) from_date,
             scraped AS to_date,
             EXTRACT(epoch FROM 
-                    scraped - LAG(scraped) OVER (PARTITION BY gtin ORDER BY scraped)
+                    scraped - LAG(scraped) OVER (PARTITION BY seller, sku ORDER BY scraped)
             ) / (60 * 60 * 24 * 365.25) AS years
         
         FROM product
         WHERE price > 0 AND name ~* $1
-        ORDER BY gtin, scraped
+        ORDER BY seller, sku, scraped
         ) t1
     WHERE increase IS NOT NULL AND years > 0
     GROUP BY DATE_TRUNC('day', to_date)
@@ -231,10 +231,10 @@ async fn search_for_product(query: String, sort: &String, pool: PgPool) -> Resul
     let result: Result<Vec<Product>, sqlx::Error> = sqlx::query_as(
         format!(
             "SELECT * FROM (
-                SELECT DISTINCT ON (gtin) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
+                SELECT DISTINCT ON (seller, sku) gtin, name, sku, image, description, rating, review_count, brand, price, url, availability
                 FROM product
                 WHERE name ILIKE $1
-                ORDER BY gtin, scraped DESC
+                ORDER BY seller, sku, scraped DESC
             ) t1
             ORDER BY {sort} ASC
             LIMIT 10"
@@ -310,7 +310,7 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
     let result: (sqlx::types::Json<DebugInfo>,) = sqlx::query_as(
         "SELECT json_build_object(
             'total', (SELECT COUNT(*) FROM product),
-            'unique', (SELECT COUNT(DISTINCT gtin) FROM product),
+            'unique', (SELECT COUNT(DISTINCT (seller, sku)) FROM product),
             'outdated', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped < NOW() - INTERVAL '7 Days'),
             'notyetscraped', (SELECT COUNT(*) FROM productscrapestatus WHERE last_scraped IS NULL)
         )"
