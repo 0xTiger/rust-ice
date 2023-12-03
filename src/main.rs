@@ -48,10 +48,13 @@ async fn main() {
         .route("/ping", get(ping))
         .route("/product/:product_id", get(product))
         .route("/product/search", get(search));
+    let static_routes = Router::new()
+        .route("/styles", get(styles))
+        .route("/logo", get(logo));
     let app = Router::new()
         .nest("/api", api_routes)
+        .nest("/static", static_routes)
         .route("/", get(root))
-        .route("/styles", get(styles))
         .route("/inflation", get(inflation))
         .route("/inflation-viz", get(inflation_viz))
         .route("/debug-dashboard", get(debug_dashboard))
@@ -93,6 +96,15 @@ async fn styles() -> impl IntoResponse {
         .status(StatusCode::OK)
         .header("Content-Type", "text/css")
         .body(include_str!("../templates/styles.css").to_owned())
+        .unwrap() 
+}
+
+
+async fn logo() -> impl IntoResponse {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "image/svg+xml")
+        .body(include_str!("../templates/shopping-cart-empty-side-view-svgrepo-com.svg").to_owned())
         .unwrap() 
 }
 
