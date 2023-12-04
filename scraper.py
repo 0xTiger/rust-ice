@@ -65,7 +65,11 @@ def scrape_asda_product(url: str):
         WebDriverWait(browser, 30).until(condition)
     except TimeoutException:
         return 'FAILURE_TIMEOUT'
-    json_ld = json.loads(condition.jsonld)
+
+    try:
+        json_ld = json.loads(condition.jsonld)
+    except json.decoder.JSONDecodeError:
+        return 'FAILURE_JSON_DECODE'
     # soup = BeautifulSoup(browser.page_source, features="html.parser")
     browser.quit()
 
