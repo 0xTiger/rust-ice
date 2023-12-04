@@ -7,6 +7,7 @@ import argparse
 from sqlalchemy import text
 from bs4 import BeautifulSoup
 from selenium.webdriver import Chrome, ActionChains
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoSuchWindowException,
@@ -27,11 +28,14 @@ if args.supermarket == 'asda':
     url = 'https://groceries.asda.com/'
 elif args.supermarket == 'sainsburys':
     url = 'https://www.sainsburys.co.uk/shop/gb/groceries'
+elif args.supermarket == 'tesco':
+    url = 'https://www.tesco.com/groceries/'
 else:
     raise ValueError(f'Unknown supermarket {args.supermarket}')
 
-
-browser = Chrome()
+chrome_options = Options()
+chrome_options.add_argument("--disable-blink-features=AutomationControlled") # Prevents Tesco blocking
+browser = Chrome(options=chrome_options)
 browser.get(url)
 
 
@@ -97,6 +101,10 @@ def find_products_in_soup(soup: BeautifulSoup) -> set[str]:
     elif args.supermarket == 'sainsburys':
         found_products = {'https://www.sainsburys.co.uk/gol-ui/product/' + x.group(2) 
             for x in re.finditer(r'/product(/details)?/([\-/a-zA-Z0-9]+)', str(soup))
+        }
+    elif args.supermarket == 'tesco':
+        found_products = {'https://www.tesco.com/groceries/en-GB/products/' + x.group(1) 
+            for x in re.finditer(r'/groceries/en-GB/products/(\d+)', str(soup))                  
         }
     else:
         raise ValueError(f'Unknown supermarket {args.supermarket}')
