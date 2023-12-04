@@ -118,7 +118,7 @@ def save_product_urls():
         db.commit()
 
 with db_ctx() as db:
-    existing_products = set(db.execute(text('SELECT url FROM product')).scalars())
+    existing_products = set(db.execute(text('SELECT url FROM productscrapestatus')).scalars())
 
 if args.automated:
     time.sleep(0.5)
