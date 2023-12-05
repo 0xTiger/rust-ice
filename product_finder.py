@@ -3,6 +3,7 @@ import time
 import random
 from itertools import count
 import argparse
+from urllib.parse import urlparse, parse_qs, urlencode
 
 from sqlalchemy import text
 from bs4 import BeautifulSoup
@@ -128,7 +129,7 @@ def save_product_urls():
 with db_ctx() as db:
     existing_products = set(db.execute(text('SELECT url FROM productscrapestatus')).scalars())
 
-if args.automated:
+if args.automated and args.supermarket == 'asda':
     time.sleep(0.5)
     accept_cookies()
     time.sleep(0.5)
@@ -149,7 +150,21 @@ for i in count():
         print(infostr, flush=True, end='\r')
         time.sleep(0.1 if not args.automated else 0.5)
 
-        if args.automated and i % 5 == 0:
+        res = urlparse(browser.current_url)
+        if args.automated and args.supermarket == 'tesco' and res.path.endswith('/all'):
+            if 'Sorry, but the page you are looking for has not been found.' in str(soup):
+                break
+            time.sleep(2)
+            current_query_params = parse_qs(res.query)
+            if 'page' in current_query_params:
+                current_query_params['page'] = [int(current_query_params['page'][0]) + 1]
+            else:
+                current_query_params['page'] = [1]
+            current_query_params['count'] = [48]
+            new_query_params = urlencode(current_query_params, doseq=True)
+            new_url = res.scheme + '://' + res.netloc + res.path + '?' + new_query_params
+            browser.get(new_url)
+        if args.automated and args.supermarket == 'asda' and i % 5 == 0:
             time.sleep(0.5)
             try:
                 status = nav_to_random_menu_item()
