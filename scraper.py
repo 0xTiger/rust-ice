@@ -46,6 +46,8 @@ def get_seller_from_url(url: str) -> str:
         return 'asda'
     elif url.startswith('https://www.sainsburys.co.uk'):
         return 'sainsburys'
+    elif url.startswith('https://www.tesco.com'):
+        return 'tesco'
     else:
         raise ValueError(f'Cannot identify seller for url {url}')
 
@@ -57,6 +59,7 @@ def scrape_asda_product(url: str):
     chrome_options = Options()
     chrome_options.add_argument("--headless")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
     chrome_options.add_argument(f"user-agent={USER_AGENT}")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled") # Prevents Tesco blocking
 
     browser = Chrome(options=chrome_options)
     browser.get(url)
@@ -81,15 +84,21 @@ def scrape_asda_product(url: str):
     # net_content = soup.find('div', class_='pdp-description-reviews__product-details-title', string='Net Content').parent.find('div', class_='pdp-description-reviews__product-details-content').text
 
     # json_ld = json.loads(soup.find_all('script', type="application/ld+json")[-1].text)
-    if 'name' not in json_ld:
-        return 'FAILURE_MISSING_NAME'
+    seller = get_seller_from_url(url)
+    
+    if seller == 'tesco':
+        if 'name' not in json_ld[2]:
+            return 'FAILURE_MISSING_NAME'
+    else:
+        if 'name' not in json_ld:
+            return 'FAILURE_MISSING_NAME'
 
     with db_ctx() as db:
-        seller = get_seller_from_url(url)
         if seller == 'asda':
             product = Product(
                 gtin = json_ld['gtin'],
                 json_ld = json_ld,
+                breadcrumbs_json_ld = None,
                 name = json_ld['name'],
                 sku = json_ld['sku'],
                 image = json_ld['image'],
@@ -107,6 +116,7 @@ def scrape_asda_product(url: str):
             product = Product(
                 gtin = None,
                 json_ld = json_ld,
+                breadcrumbs_json_ld = None,
                 name = json_ld['name'],
                 sku = json_ld['sku'],
                 image = json_ld['image'],
@@ -119,7 +129,26 @@ def scrape_asda_product(url: str):
                 availability = json_ld['offers']['availability'],
                 seller = seller,
                 scraped = datetime.now()
-            )         
+            )
+        elif seller == 'tesco':
+            corp_json_ld, website_json_ld, product_json_ld, breadcrumbs_json_ld = json_ld
+            product = Product(
+                gtin = product_json_ld['gtin13'],
+                json_ld = product_json_ld,
+                breadcrumbs_json_ld = breadcrumbs_json_ld,
+                name = product_json_ld['name'],
+                sku = product_json_ld['sku'],
+                image = product_json_ld['image'][0],
+                description = product_json_ld['description'],
+                rating = product_json_ld.get('aggregateRating', dict()).get('ratingValue'),
+                review_count = product_json_ld.get('aggregateRating', dict()).get('reviewCount', 0),
+                brand = product_json_ld['brand']['name'],
+                price = product_json_ld['offers']['price'],
+                url = product_json_ld['offers']['url'],
+                availability = product_json_ld['offers']['availability'],
+                seller = seller,
+                scraped = datetime.now()
+            )
         try:
             db.add(product)
             db.commit()

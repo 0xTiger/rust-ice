@@ -9,7 +9,7 @@ use std::env;
 #[derive(sqlx::FromRow)]
 #[derive(Serialize)]
 pub struct Product {
-    pub gtin: Option<i32>,
+    pub gtin: Option<i64>,
     pub name: String,
     pub sku: i64,
     pub image: String,
