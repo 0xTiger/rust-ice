@@ -73,8 +73,14 @@ async fn main() {
 }
 
 
-async fn root() -> &'static str {
-    "Hello, World!"
+#[derive(Template)]
+#[template(path="landing.html")]
+struct LandingTemplate {}
+
+
+async fn root() -> Html<String> {
+    let inflation_template = LandingTemplate {};
+    Html(inflation_template.render().unwrap())
 }
 
 
@@ -289,6 +295,7 @@ async fn search_pretty_results(Query(params): Query<HashMap<String, String>>, Ex
             let color = match product.seller.as_str() {
                 "asda" => "green",
                 "sainsburys" => "orange",
+                "tesco" => "blue",
                 _ => "black"
             };
             format!(r#"<tr><td><img src="{image}" width=24 height=24></td><td>{name}</td><td style="color: {color};">£{price:.2}</td><td>{brand}</td><td>{rating:.2?}</td></tr>"#)
