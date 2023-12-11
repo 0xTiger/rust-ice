@@ -46,8 +46,8 @@ async fn main() {
 
     let api_routes = Router::new()
         .route("/ping", get(ping))
-        .route("/product/:product_id", get(product))
-        .route("/product/search", get(search));
+        .route("/products/:product_id", get(product))
+        .route("/products/search", get(search));
     let static_routes = Router::new()
         .route("/styles", get(styles))
         .route("/logo", get(logo));
