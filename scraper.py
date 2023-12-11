@@ -164,7 +164,7 @@ if __name__ == '__main__':
         WHERE
             last_scraped < NOW() - interval '2 day'
             OR last_scraped IS NULL
-        ORDER BY last_scraped NULLS FIRST
+        ORDER BY ROW_NUMBER() OVER (PARTITION BY seller ORDER BY last_scraped NULLS FIRST)
         """
         urls_to_scrape = db.execute(text(query)).scalars().all()
 
