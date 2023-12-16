@@ -1,6 +1,5 @@
 use std::{
     time::Instant,
-    net::SocketAddr,
     collections::HashMap
 };
 use serde::Serialize;
@@ -12,6 +11,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Html, Response},
     routing::get,
+    routing::post,
     Json,
     Router,
     Extension,
@@ -25,17 +25,33 @@ use sqlx::{
 use askama::Template;
 
 mod db;
+mod auth;
+use auth::{
+    get_login,
+    post_login,
+    get_logout,
+    Backend,
+};
 use db::{
     db_conn,
     Product,
     DebugInfo
 };
 
-
 #[derive(Serialize)]
 struct JStatus {
     detail: bool,
 }
+
+use axum::{error_handling::HandleErrorLayer, BoxError};
+use axum_login::{
+    login_required,
+    tower_sessions::{Expiry, MemoryStore, SessionManagerLayer},
+    AuthManagerLayerBuilder,
+};
+use time::Duration;
+use tower::ServiceBuilder;
+
 
 
 #[tokio::main]
@@ -44,6 +60,27 @@ async fn main() {
     let pool = db_conn().await;
     tracing_subscriber::fmt::init();
 
+        // Session layer.
+    //
+    // This uses `tower-sessions` to establish a layer that will provide the session
+    // as a request extension.
+    let session_store = MemoryStore::default();
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_expiry(Expiry::OnInactivity(Duration::days(1)));
+
+    // Auth service.
+    //
+    // This combines the session layer with our backend to establish the auth
+    // service which will provide the auth session as a request extension.
+    let backend = Backend::new(pool.clone());
+    let auth_service = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|_: BoxError| async {
+            StatusCode::BAD_REQUEST
+        }))
+        .layer(AuthManagerLayerBuilder::new(backend, session_layer).build());
+
+
     let api_routes = Router::new()
         .route("/ping", get(ping))
         .route("/products/:product_id", get(product))
@@ -51,25 +88,28 @@ async fn main() {
     let static_routes = Router::new()
         .route("/styles", get(styles))
         .route("/logo", get(logo));
+    let authed_routes = Router::new()
+        .route("/debug-dashboard", get(debug_dashboard))
+        .route_layer(login_required!(Backend, login_url = "/login"))
+        .route("/login", post(post_login))
+        .route("/login", get(get_login))
+        .route("/logout", get(get_logout))
+        .layer(auth_service);
     let app = Router::new()
         .nest("/api", api_routes)
         .nest("/static", static_routes)
         .route("/", get(root))
         .route("/inflation", get(inflation))
         .route("/inflation-viz", get(inflation_viz))
-        .route("/debug-dashboard", get(debug_dashboard))
         .route("/search-pretty-results", get(search_pretty_results))
         .route("/search", get(search_pretty_page))
+        .merge(authed_routes)
         .layer(Extension(pool));
 
-    // run our app with hyper
-    // `axum::Server` is a re-export of `hyper::Server`
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = "0.0.0.0:3000";
     tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
 
