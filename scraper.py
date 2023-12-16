@@ -9,6 +9,7 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
 
 from db import db_ctx, Product, ProductScrapeStatus
 
@@ -52,16 +53,7 @@ def get_seller_from_url(url: str) -> str:
         raise ValueError(f'Cannot identify seller for url {url}')
 
 
-def scrape_asda_product(url: str):
-    # Sainsbury's blocks requests whose User-Agent identifies them as a headless browser
-    # So we set it manually here.
-    USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
-    chrome_options.add_argument(f"user-agent={USER_AGENT}")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled") # Prevents Tesco blocking
-
-    browser = Chrome(options=chrome_options)
+def scrape_asda_product(browser: WebDriver, url: str):
     browser.get(url)
     condition = wait_for_product_jsonld()
     try:
@@ -74,7 +66,6 @@ def scrape_asda_product(url: str):
     except json.decoder.JSONDecodeError:
         return 'FAILURE_JSON_DECODE'
     # soup = BeautifulSoup(browser.page_source, features="html.parser")
-    browser.quit()
 
     # code = soup.find('span', class_='pdp-main-details__product-code').text.strip('Product code: ')
     # title = soup.find('h1', class_='pdp-main-details__title').text
@@ -157,6 +148,17 @@ def scrape_asda_product(url: str):
     
     return 'SUCCESS'
 
+
+# Sainsbury's blocks requests whose User-Agent identifies them as a headless browser
+# So we set it manually here.
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+chrome_options = Options()
+chrome_options.add_argument("--headless")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+chrome_options.add_argument(f"user-agent={USER_AGENT}")
+chrome_options.add_argument("--disable-blink-features=AutomationControlled") # Prevents Tesco blocking
+browser = Chrome(options=chrome_options)
+
+
 if __name__ == '__main__':
     with db_ctx() as db:
         query = """
@@ -170,7 +172,7 @@ if __name__ == '__main__':
 
     for url in urls_to_scrape:
         print(url, end='', flush=True)
-        status = scrape_asda_product(url)
+        status = scrape_asda_product(browser, url)
 
         with db_ctx() as db:
             (
