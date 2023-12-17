@@ -101,7 +101,7 @@ def find_products_in_soup(soup: BeautifulSoup) -> set[str]:
         }
     elif args.supermarket == 'sainsburys':
         found_products = {'https://www.sainsburys.co.uk/gol-ui/product/' + x.group(2) 
-            for x in re.finditer(r'/product(/details)?/([\-/a-zA-Z0-9]+)', str(soup))
+            for x in re.finditer(r'/product(/details)?/([\-/a-zA-Z0-9%]+)', str(soup))
         }
     elif args.supermarket == 'tesco':
         found_products = {'https://www.tesco.com/groceries/en-GB/products/' + x.group(1) 
