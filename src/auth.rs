@@ -22,7 +22,7 @@ use crate::db::db_conn;
 #[derive(Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     id: i64,
-    username: String,
+    email: String,
     password: String,
 }
 
@@ -32,7 +32,7 @@ impl std::fmt::Debug for User {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("User")
             .field("id", &self.id)
-            .field("username", &self.username)
+            .field("email", &self.email)
             .field("password", &"[redacted]")
             .finish()
     }
@@ -57,7 +57,7 @@ impl AuthUser for User {
 // to authenticate requests with the backend.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Credentials {
-    pub username: String,
+    pub email: String,
     pub password: String,
     pub next: Option<String>,
 }
@@ -83,8 +83,8 @@ impl AuthnBackend for Backend {
         &self,
         creds: Self::Credentials,
     ) -> Result<Option<Self::User>, Self::Error> {
-        let user: Option<Self::User> = sqlx::query_as("SELECT * FROM users WHERE username = $1 ")
-            .bind(creds.username)
+        let user: Option<Self::User> = sqlx::query_as("SELECT * FROM users WHERE email = $1 ")
+            .bind(creds.email)
             .fetch_optional(&self.db)
             .await?;
         Ok(user.filter(|user| {
@@ -185,8 +185,8 @@ pub async fn get_register(Query(NextUrl { next }): Query<NextUrl>) -> impl IntoR
 pub async fn post_register(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
     let password_hash = generate_hash(creds.password);
     let pool = db_conn().await;
-    let query_result = sqlx::query("INSERT INTO users (username, password) VALUES ($1, $2)")
-        .bind(creds.username)
+    let query_result = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2)")
+        .bind(creds.email)
         .bind(password_hash)
         .execute(&pool).await;
     if query_result.is_err() {
