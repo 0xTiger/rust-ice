@@ -33,6 +33,8 @@ use auth::{
     get_login,
     post_login,
     get_logout,
+    get_register,
+    post_register,
     Backend,
 };
 use db::{
@@ -100,6 +102,8 @@ async fn main() {
         .route_layer(login_required!(Backend, login_url = "/login"))
         .route("/login", post(post_login))
         .route("/login", get(get_login))
+        .route("/register", post(post_register))
+        .route("/register", get(get_register))
         .route("/logout", get(get_logout))
         .layer(auth_service);
     let app = Router::new()
