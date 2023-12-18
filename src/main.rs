@@ -39,8 +39,10 @@ use db::{
     db_conn,
     Product,
     DebugInfo,
-    ApiKey
+    ApiKey,
+    CreditsPeriod
 };
+use uuid::Uuid;
 
 #[derive(Serialize)]
 struct JStatus {
@@ -401,7 +403,9 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
 async fn verify_header_api_key(mut req: Request, next: Next) -> Result<Response, StatusCode> {
     let auth_header = req.headers()
         .get(http::header::AUTHORIZATION)
-        .and_then(|header| header.to_str().ok());
+        .and_then(|header| header.to_str().ok())
+        .and_then(|header| header.strip_prefix("Bearer "))
+        .and_then(|api_key| Uuid::try_parse(api_key).ok());
 
     let auth_header = if let Some(auth_header) = auth_header {
         auth_header
@@ -409,13 +413,22 @@ async fn verify_header_api_key(mut req: Request, next: Next) -> Result<Response,
         return Err(StatusCode::UNAUTHORIZED);
     };
     let pool = db_conn().await;
-    let api_key: Option<ApiKey> = sqlx::query_as("SELECT * FROM apikey WHERE key = $1 LIMIT 1")
+    let credits_period: Option<CreditsPeriod> = sqlx::query_as(r#"
+        UPDATE credits_period SET credits_used = credits_used + 1
+        FROM api_key
+        WHERE credits_period.users_id = api_key.users_id AND key = $1
+        RETURNING credits_period.*
+        "#)
         .bind(auth_header)
         .fetch_optional(&pool)
         .await.unwrap();
-    if api_key.is_some() {
-        println!("{api_key:?}");
-        Ok(next.run(req).await)
+    if let Some(credits_period) = credits_period {
+        println!("{}/{}", credits_period.credits_used, credits_period.credits_allocated);
+        if credits_period.credits_used <= credits_period.credits_allocated {
+            Ok(next.run(req).await)
+        } else {
+            Err(StatusCode::UNAUTHORIZED)
+        }
     } else {
         Err(StatusCode::UNAUTHORIZED)
     }

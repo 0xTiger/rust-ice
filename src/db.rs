@@ -5,6 +5,8 @@ use sqlx::{
     Postgres
 };
 use std::env;
+use chrono::NaiveDate;
+use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
 #[derive(Serialize)]
@@ -34,9 +36,21 @@ pub struct DebugInfo {
 #[derive(sqlx::FromRow, Debug)]
 pub struct ApiKey {
     pub id: i64,
-    pub key: String,
+    pub users_id: i64,
+    pub key: Uuid,
     pub calls_made: i64
 }
+
+#[derive(sqlx::FromRow, Debug)]
+pub struct CreditsPeriod {
+    pub id: i64,
+    pub users_id: i64,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub credits_used: i32,
+    pub credits_allocated: i32,
+}
+
 
 pub async fn db_conn() -> Pool<Postgres>{
     let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
