@@ -2,7 +2,6 @@ use serde::Serialize;
 use dotenv::dotenv;
 use axum::{
     http::StatusCode,
-    routing::get,
     routing::post,
     Json,
     Router,
@@ -12,10 +11,7 @@ use axum::{
 mod db;
 mod auth;
 use auth::{
-    get_login,
     post_login,
-    get_logout,
-    get_register,
     post_register,
     Backend,
 };
@@ -65,10 +61,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/login", post(post_login))
-        .route("/login", get(get_login))
         .route("/register", post(post_register))
-        .route("/register", get(get_register))
-        .route("/logout", get(get_logout))
         .layer(auth_service)
         .layer(Extension(pool));
 

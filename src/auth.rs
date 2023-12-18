@@ -160,27 +160,6 @@ pub async fn post_login(mut auth_session: AuthSession, Form(creds): Form<Credent
     }
 }
 
-pub async fn get_login(Query(NextUrl { next }): Query<NextUrl>) -> Html<String> {
-    Html(LoginTemplate {
-        message: None,
-        next,
-    }.render().unwrap())
-}
-
-pub async fn get_logout(mut auth_session: AuthSession) -> impl IntoResponse {
-    match auth_session.logout() {
-        Ok(_) => Redirect::to("/login").into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-pub async fn get_register(Query(NextUrl { next }): Query<NextUrl>) -> impl IntoResponse {
-    Html(RegisterTemplate {
-        message: None,
-        next,
-    }.render().unwrap())
-}
-
 
 pub async fn post_register(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
     let password_hash = generate_hash(creds.password);
