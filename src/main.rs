@@ -1,4 +1,3 @@
-use serde::Serialize;
 use dotenv::dotenv;
 use axum::{
     http::StatusCode,
@@ -10,15 +9,9 @@ mod db;
 mod auth;
 use auth::{
     post_login,
-    post_register,
     Backend,
 };
 use db::db_conn;
-
-#[derive(Serialize)]
-struct JStatus {
-    detail: bool,
-}
 
 use axum::{error_handling::HandleErrorLayer, BoxError};
 use axum_login::{
@@ -51,15 +44,11 @@ async fn main() {
     // service which will provide the auth session as a request extension.
     let backend = Backend::new(pool.clone());
     let auth_service = ServiceBuilder::new()
-        .layer(HandleErrorLayer::new(|_: BoxError| async {
-            StatusCode::BAD_REQUEST
-        }))
+        .layer(HandleErrorLayer::new(|_: BoxError| async {StatusCode::BAD_REQUEST}))
         .layer(AuthManagerLayerBuilder::new(backend, session_layer).build());
-
 
     let app = Router::new()
         .route("/login", post(post_login))
-        .route("/register", post(post_register))
         .layer(auth_service);
 
     tracing::debug!("listening");

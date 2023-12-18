@@ -12,8 +12,6 @@ use axum_login::{AuthUser, AuthnBackend, UserId};
 use serde::{Serialize, Deserialize};
 use sqlx::{FromRow, PgPool};
 
-use crate::db::db_conn;
-
 #[derive(Clone, Serialize, Deserialize, FromRow, Debug)]
 pub struct User {
     id: i64,
@@ -86,21 +84,11 @@ type AuthSession = axum_login::AuthSession<Backend>;
 
 
 
-pub async fn post_login(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
-    let user = match auth_session.authenticate(creds.clone()).await {
+pub async fn post_login(auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
+    match auth_session.authenticate(creds.clone()).await {
         Ok(Some(user)) => user,
-        Ok(None) => {
-            return "Invalid credentials".into_response()
-        }
+        Ok(None) => return "Invalid credentials".into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    Redirect::to("/").into_response()
-}
-
-
-pub async fn post_register(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
-    let pool = db_conn().await;
-    let query_result = sqlx::query("INSERT INTO users (username, password) VALUES ('username', 'password123')")
-        .execute(&pool).await;
     Redirect::to("/").into_response()
 }
