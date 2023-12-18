@@ -62,12 +62,8 @@ impl AuthnBackend for Backend {
     type Credentials = Credentials;
     type Error = sqlx::Error;
 
-    async fn authenticate(
-        &self,
-        creds: Self::Credentials,
-    ) -> Result<Option<Self::User>, Self::Error> {
-        let user: Option<Self::User> = sqlx::query_as("SELECT * FROM users WHERE username = $1 ")
-            .bind(creds.username)
+    async fn authenticate(&self, creds: Self::Credentials) -> Result<Option<Self::User>, Self::Error> {
+        let user: Option<Self::User> = sqlx::query_as("SELECT * FROM users WHERE username = 'fake_username' ")
             .fetch_optional(&self.db)
             .await?;
         Ok(user)
@@ -89,13 +85,6 @@ impl AuthnBackend for Backend {
 type AuthSession = axum_login::AuthSession<Backend>;
 
 
-// This allows us to extract the "next" field from the query string. We use this
-// to redirect after log in.
-#[derive(Debug, Deserialize)]
-pub struct NextUrl {
-    next: Option<String>,
-}
-
 
 pub async fn post_login(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
     let user = match auth_session.authenticate(creds.clone()).await {
@@ -105,10 +94,6 @@ pub async fn post_login(mut auth_session: AuthSession, Form(creds): Form<Credent
         }
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-
-    if auth_session.login(&user).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
     Redirect::to("/").into_response()
 }
 
