@@ -31,6 +31,13 @@ pub struct DebugInfo {
     pub notyetscraped: i64,
 }
 
+#[derive(sqlx::FromRow, Debug)]
+pub struct ApiKey {
+    pub id: i64,
+    pub key: String,
+    pub calls_made: i64
+}
+
 pub async fn db_conn() -> Pool<Postgres>{
     let pg_password: String = env::var("POSTGRES_PASSWORD").expect("$POSTGRES_PASSWORD is not set");
     let pg_user: String = env::var("POSTGRES_USER").expect("$POSTGRES_PASSWORD is not set");

@@ -8,13 +8,16 @@ use dotenv::dotenv;
 use axum::{
     extract::Path,
     extract::Query,
+    extract::Request,
     http::StatusCode,
+    http,
     response::{IntoResponse, Html, Response},
     routing::get,
     routing::post,
     Json,
     Router,
     Extension,
+    middleware::{self, Next},
 };
 use sqlx::{
     Error,
@@ -35,7 +38,8 @@ use auth::{
 use db::{
     db_conn,
     Product,
-    DebugInfo
+    DebugInfo,
+    ApiKey
 };
 
 #[derive(Serialize)]
@@ -47,7 +51,7 @@ use axum::{error_handling::HandleErrorLayer, BoxError};
 use axum_login::{
     login_required,
     tower_sessions::{Expiry, MemoryStore, SessionManagerLayer},
-    AuthManagerLayerBuilder,
+    AuthManagerLayerBuilder, AuthnBackend,
 };
 use time::Duration;
 use tower::ServiceBuilder;
@@ -82,9 +86,10 @@ async fn main() {
 
 
     let api_routes = Router::new()
-        .route("/ping", get(ping))
         .route("/products/:product_id", get(product))
-        .route("/products/search", get(search));
+        .route("/products/search", get(search))
+        .route_layer(middleware::from_fn(verify_header_api_key))
+        .route("/ping", get(ping));
     let static_routes = Router::new()
         .route("/styles", get(styles))
         .route("/logo", get(logo));
@@ -389,4 +394,39 @@ async fn debug_dashboard(Extension(pool): Extension<PgPool>) -> Html<String> {
         notyetscraped:  debug_info.notyetscraped
     };
     return Html(debug_dashboard_template.render().unwrap())
+}
+
+
+
+async fn verify_header_api_key(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+    let auth_header = req.headers()
+        .get(http::header::AUTHORIZATION)
+        .and_then(|header| header.to_str().ok());
+
+    let auth_header = if let Some(auth_header) = auth_header {
+        auth_header
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    let pool = db_conn().await;
+    let api_key: Option<ApiKey> = sqlx::query_as("SELECT * FROM apikey WHERE key = $1 LIMIT 1")
+        .bind(auth_header)
+        .fetch_optional(&pool)
+        .await.unwrap();
+    if api_key.is_some() {
+        println!("{api_key:?}");
+        Ok(next.run(req).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+
+
+    // if let Some(current_user) = current_user_for_api_key(auth_header).await {
+    //     // insert the current user into a request extension so the handler can
+    //     // extract it
+    //     req.extensions_mut().insert(current_user);
+    //     Ok(next.run(req).await)
+    // } else {
+    //     Err(StatusCode::UNAUTHORIZED)
+    // }
 }
