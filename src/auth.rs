@@ -12,10 +12,12 @@ use axum::{
     response::Html,
 };
 use axum_login::{AuthUser, AuthnBackend, UserId};
-use password_auth::verify_password;
+use password_auth::{verify_password, generate_hash};
 use serde::{Serialize, Deserialize};
 use sqlx::{FromRow, PgPool};
 use askama::Template;
+
+use crate::db::db_conn;
 
 #[derive(Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
@@ -119,6 +121,13 @@ struct LoginTemplate {
     next: Option<String>,
 }
 
+#[derive(Template)]
+#[template(path = "register.html")]
+struct RegisterTemplate {
+    message: Option<String>,
+    next: Option<String>,
+}
+
 // This allows us to extract the "next" field from the query string. We use this
 // to redirect after log in.
 #[derive(Debug, Deserialize)]
@@ -162,5 +171,36 @@ pub async fn get_logout(mut auth_session: AuthSession) -> impl IntoResponse {
     match auth_session.logout() {
         Ok(_) => Redirect::to("/login").into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn get_register(Query(NextUrl { next }): Query<NextUrl>) -> impl IntoResponse {
+    Html(RegisterTemplate {
+        message: None,
+        next,
+    }.render().unwrap())
+}
+
+
+pub async fn post_register(mut auth_session: AuthSession, Form(creds): Form<Credentials>) -> impl IntoResponse {
+    let password_hash = generate_hash(creds.password);
+    let pool = db_conn().await;
+    let query_result = sqlx::query("INSERT INTO users (username, password) VALUES ($1, $2)")
+        .bind(creds.username)
+        .bind(password_hash)
+        .execute(&pool).await;
+    if query_result.is_err() {
+        println!("{:?}", query_result.err());
+        return Response::builder().body(RegisterTemplate {
+            message: Some("Invalid credentials.".to_string()),
+            next: creds.next,
+        }
+        .render().unwrap()).unwrap().into_response()
+    }
+
+    if let Some(ref next) = creds.next {
+        Redirect::to(next).into_response()
+    } else {
+        Redirect::to("/").into_response()
     }
 }

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+    {% if let Some(message) = message %}
+    <span><strong>{{ message }}</strong></span>
+    {% endif %}
+    <form method="post">
+      <fieldset>
+        <legend>User register</legend>
+        <p>
+          <label for="username">Username</label>
+          <input name="username" id="username"/>
+        </p>
+        <p>
+          <label for="password">Password</label>
+          <input
+            name="password"
+            id="password"
+            type="password"
+          />
+        </p>
+      </fieldset>
+
+      <input type="submit" value="register" />
+
+      {% if let Some(next) = next %}
+      <input type="hidden" name="next" value="{{next}}" />
+      {% endif %}
+    </form>
+{% endblock %}
