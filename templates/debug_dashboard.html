@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div hx-get="/debug-dashboard" hx-trigger="every 1s" hx-select="#debug_table" hx-target="#debug_table">
+    <table class="table" id="debug_table">
+        <tr><td>Total</td><td>{{total}}</td><tr>
+        <tr><td>Outdated</td><td>{{outdated}}</td><tr>
+        <tr><td>Unique</td><td>{{unique}}</td><tr>
+        <tr><td>Not Yet Scraped</td><td>{{notyetscraped}}</td><tr>
+    </table>
+</div>
+{% endblock %}

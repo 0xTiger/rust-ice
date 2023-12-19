@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row align-items-start">
+      <div class="col px-5">
+        <div class="my-4">
+            <h1>Drive your business growth with comprehensive pricing data</h1>
+        </div>
+        <p>We provide up to date product information from all the largest UK supermarkets</p>
+        <div class="row align-items-start">
+            <div class="col-2 mt-2">
+
+            </div>
+            <div class="col-4 mt-2">
+                <button type="button" class="btn btn-secondary">Contact Us</button>
+            </div>
+            <div class="col-4 mt-2">
+                <button type="button" class="btn btn-primary">Start Free</button>
+            </div>
+            <div class="col-2 mt-2">
+
+            </div>
+        </div>
+      </div>
+      <div class="col container" id="product-data-example">
+        <pre><code>
+    {
+        "gtin": 3830410,
+        "name": "ASDA 4 Chocolate & Hazelnut Ice Cream Cones",
+        "sku": 910000538419,
+        "image": "https://ui.assets-asda.com:443/dm/5052449481341",
+        "description": "",
+        "rating": 4.68,
+        "review_count": 99,
+        "brand": "ASDA",
+        "price": 1.45,
+        "availability": "https://schema.org/InStock",
+        "seller": "asda"
+    }
+        </code></pre>
+      </div>
+    </div>
+  </div>
+
+{% endblock %}
